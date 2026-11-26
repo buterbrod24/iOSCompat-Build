@@ -1,0 +1,44 @@
+# Local build products
+/build/
+/output/
+/output-*/
+DerivedData/
+.build/
+*.ipa
+*.ipsw
+*.dylib
+*.framework/
+*.xcframework/
+*.app/
+*.zip
+*.7z
+*.tar
+*.gz
+*.ll
+*.dSYM/
+# Signing and local secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.pem
+*.key
+*.mobileprovision
+*.cer
+*.crt
+*.jks
+# Local device reports and firmware extracts
+*.ips
+*.crash
+*.log
+iOSCompat-*Report*.txt
+unified-progress*.json
+/device-reports/
+/firmware/
+/extracted/
+/Payload/
+# Python / macOS
+__pycache__/
+*.pyc
+.DS_Store
