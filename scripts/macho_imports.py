@@ -85,3 +85,51 @@ def read_imports(data):
     # Classical dyld bind streams are deliberately not claimed as decoded.
     complete = bool(chained) and not legacy
     return sorted(rows), sources, complete
+
+def read_dependencies(data):
+    """Return declared load commands in library-ordinal order, not resolved paths."""
+    if len(data) < 32 or struct.unpack_from("<I", data)[0] != 0xfeedfacf:
+        raise ValueError("expected thin little-endian Mach-O 64")
+    ncmd, size = struct.unpack_from("<II", data, 16)
+    if size > len(data)-32 or ncmd > size//8:
+        raise ValueError("invalid load commands")
+    kinds = {0xc:"load", 0x80000018:"weak", 0x8000001f:"reexport",
+             0x20:"lazy", 0x80000023:"upward"}
+    deps, rpaths = [], []
+    pos = 32
+    for _ in range(ncmd):
+        if pos+8 > 32+size:
+            raise ValueError("truncated load command")
+        cmd, length = struct.unpack_from("<II", data, pos)
+        if length < 8 or length % 8 or pos+length > 32+size:
+            raise ValueError("invalid load command size")
+        if cmd in kinds or cmd == 0x8000001c:
+            minimum = 24 if cmd in kinds else 12
+            if length < minimum:
+                raise ValueError("short path command")
+            offset = struct.unpack_from("<I", data, pos+8)[0]
+            if not minimum <= offset < length:
+                raise ValueError("invalid path offset")
+            end = data.find(b"\0", pos+offset, pos+length)
+            if end < 0:
+                raise ValueError("unterminated dependency path")
+            name = data[pos+offset:end].decode("utf-8", "replace")
+            if cmd in kinds:
+                deps.append({"ordinal":len(deps)+1, "kind":kinds[cmd], "path":name})
+            else:
+                rpaths.append(name)
+        pos += length
+    if pos != 32+size:
+        raise ValueError("inconsistent load commands")
+    return deps, rpaths
+
+def declared_provider(deps, ordinal, source):
+    # Only ordinary ordinals are mapped; special or ambiguous values stay unknown.
+    # Chained ordinals are unsigned in read_imports and may encode negative values.
+    if source == "nlist" and ordinal >= 0xfe:
+        return None
+    if source == "chained" and (0xf1 <= ordinal <= 0xff or ordinal >= 0xfff1):
+        return None
+    if 1 <= ordinal <= len(deps):
+        return deps[ordinal-1]["path"]
+    return None

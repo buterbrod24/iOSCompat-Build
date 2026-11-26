@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Read-only inventory of thin Mach-O imports inside an IPA. Unknown is not compatible."""
 import argparse, json, pathlib, sys, zipfile, struct
-from macho_imports import read_imports
+from macho_imports import read_imports, read_dependencies, declared_provider
 
 def scan(path, catalog):
-    result = {"schema": 1, "target": catalog["target"], "images": [], "limitations": [
+    result = {"schema": 2, "target": catalog["target"], "images": [], "limitations": [
         "No dependency resolution or dyld cache export inventory yet",
         "Fat binaries and classical bind streams are not fully decoded",
         "Candidate evidence is not proof of compatibility with this image"]}
@@ -29,12 +29,16 @@ def scan(path, catalog):
                 try:
                     data = magic + f.read()
                     rows, sources, complete = read_imports(data)
-                    image.update(sources=sources, complete=complete, imports=[])
+                    deps, rpaths = read_dependencies(data)
+                    image.update(sources=sources, complete=complete, imports=[], dependencies=deps, rpaths=rpaths)
                     for name, ordinal, weak, source in rows:
                         key = name[1:] if name.startswith("_") else name
                         entry = catalog["symbols"].get(key, {})
+                        provider = declared_provider(deps, ordinal, source)
+                        matched = bool(entry) and provider == entry.get("provider")
                         image["imports"].append(dict(symbol=name, ordinal=ordinal, weak=weak, source=source,
-                            status=entry.get("status", "unknown"), expected_provider=entry.get("provider")))
+                            declared_provider=provider, catalog_provider_match=matched,
+                            status=entry["status"] if matched else "unknown", expected_provider=entry.get("provider")))
                 except (ValueError, struct.error, OSError) as exc:
                     image["error"] = str(exc)
     return result
