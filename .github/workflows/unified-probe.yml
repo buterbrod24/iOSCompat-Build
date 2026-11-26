@@ -34,21 +34,35 @@ jobs:
           done
           mkdir -p "$RUNNER_TEMP/stock-batch"
           gh run download 45889657494 --repo "$GITHUB_REPOSITORY" --name unified-stock-client-batch --dir "$RUNNER_TEMP/stock-batch"
-          for lib in libConcurrencyCompat.dylib libConcurrencyStockClient.dylib libSwiftUICompat.dylib libSwiftUIStockClient.dylib; do
+          for lib in libConcurrencyCompat.dylib libConcurrencyStockClient.dylib libSwiftUIStockClient.dylib; do
             cp "$RUNNER_TEMP/stock-batch/$lib" "$app/Frameworks/"
             codesign --verify --strict "$app/Frameworks/$lib"
           done
-          test "$(find "$app/Frameworks" -name '*.dylib' | wc -l | tr -d ' ')" = 6
+          mkdir -p "$RUNNER_TEMP/array-compat" "$RUNNER_TEMP/toolbar-pair"
+          gh run download 45892050055 --repo "$GITHUB_REPOSITORY" --name swiftcore-reserve-candidate --dir "$RUNNER_TEMP/array-compat"
+          gh run download 45893067193 --repo "$GITHUB_REPOSITORY" --name swiftui-toolbar-pair-candidate --dir "$RUNNER_TEMP/toolbar-pair"
+          for lib in libSwiftCoreCompat.dylib libSwiftCoreStockClient.dylib; do
+            cp "$RUNNER_TEMP/array-compat/$lib" "$app/Frameworks/"
+            codesign --verify --strict "$app/Frameworks/$lib"
+          done
+          for lib in libSwiftUICompat.dylib libSwiftUIToolbarPairStockClient.dylib; do
+            cp "$RUNNER_TEMP/toolbar-pair/$lib" "$app/Frameworks/"
+            codesign --verify --strict "$app/Frameworks/$lib"
+          done
+          test "$(find "$app/Frameworks" -name '*.dylib' | wc -l | tr -d ' ')" = 9
+          for lib in "$app"/Frameworks/*.dylib; do
+            xcrun vtool -show-build "$lib" | grep -Eq 'minos[[:space:]]+16\.2$'
+          done
           cp unified/Info.plist "$app/Info.plist"
-          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift research/LegacyChange.swift -o "$app/UnifiedProbe"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift research/LegacyChange.swift probe-v3-prep/ReserveProbe.swift -o "$app/UnifiedProbe"
           xcrun vtool -show-build "$app/UnifiedProbe" | tee "$out/build.txt"
           grep -Eq 'minos[[:space:]]+16\.2$' "$out/build.txt"
           codesign --force --sign - "$app"
           codesign --verify --deep --strict "$app"
-          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.2.0.ipa" Payload)
-          unzip -t "$out/iOSCompat-UnifiedProbe-0.2.0.ipa"
+          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.3.0.ipa" Payload)
+          unzip -t "$out/iOSCompat-UnifiedProbe-0.3.0.ipa"
       - uses: actions/upload-artifact@v4
         with:
           name: unified-device-probe
-          path: output-unified/iOSCompat-UnifiedProbe-0.2.0.ipa
+          path: output-unified/iOSCompat-UnifiedProbe-0.3.0.ipa
           if-no-files-found: error

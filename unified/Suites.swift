@@ -178,6 +178,48 @@ func require(_ ok: Bool, _ why: String) throws {
             },
             .init(name:"SwiftUI / source-level change state") {
                 try Self.checkChangeState()
+            },
+            .init(name:"Swift Core / reserve adapter loads") {
+                let h = try self.batchHandle("libSwiftCoreCompat.dylib")
+                try require(dlsym(h,"$ss15ContiguousArrayV15reserveCapacityyySiFyXl_Ts5") != nil,"missing specialized export")
+                return "adapter loaded and exact export resolved"
+            },
+            .init(name:"Swift Core / independent reserve SDK bridge loads") {
+                _ = try self.batchHandle("libSwiftCoreCompat.dylib")
+                let h = try self.batchHandle("libSwiftCoreStockClient.dylib")
+                try require(dlsym(h,"ioscompat_stock_reserve") != nil,"missing stock bridge entry")
+                return "independent SDK client loaded"
+            },
+            .init(name:"Swift Core / rebound reserve functional batch") {
+                _ = try self.batchHandle("libSwiftCoreCompat.dylib")
+                let h = try self.batchHandle("libSwiftCoreStockClient.dylib")
+                guard let entry = dlsym(h,"ioscompat_stock_reserve") else {
+                    throw ProbeFailure.failed("missing stock reserve entry")
+                }
+                let bridge = unsafeBitCast(entry,to:ReserveProbe.Bridge.self)
+                let rows = ReserveProbe.run(bridge)
+                let passed = rows.filter{$0.1}.count
+                let detail = rows.map{"\($0.1 ? "PASS" : "FAIL") \($0.0)"}.joined(separator:"\n")
+                try require(passed == 12 && rows.count == 12,"reserve checks \(passed)/\(rows.count)\n"+detail)
+                return "12/12 independent SDK reserve subchecks\n"+detail
+            },
+            .init(name:"SwiftUI / paired toolbar SDK client loads") {
+                let compat = try self.batchHandle("libSwiftUICompat.dylib")
+                try require(dlsym(compat,"$s7SwiftUI20ToolbarItemPlacementV14topBarTrailingACvgZ") != nil,"missing trailing export")
+                let h = try self.batchHandle("libSwiftUIToolbarPairStockClient.dylib")
+                try require(dlsym(h,"ioscompat_stock_toolbar_pair_test") != nil,"missing pair entry")
+                return "trailing getter resolved and paired client loaded"
+            },
+            .init(name:"SwiftUI / paired stock toolbar construction") {
+                _ = try self.batchHandle("libSwiftUICompat.dylib")
+                let h = try self.batchHandle("libSwiftUIToolbarPairStockClient.dylib")
+                guard let entry = dlsym(h,"ioscompat_stock_toolbar_pair_test") else {
+                    throw ProbeFailure.failed("missing paired toolbar entry")
+                }
+                typealias Test = @convention(c) () -> Int32
+                let result = unsafeBitCast(entry,to:Test.self)()
+                try require(result == 1,"paired toolbar returned \(result)")
+                return "both rebound stock getters invoked; hosting layout completed, not visual equivalence"
             }
         ]
     }
