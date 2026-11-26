@@ -7,6 +7,8 @@ on:
       - 'scripts/compat_catalog.json'
       - 'scripts/macho_imports.py'
       - 'scripts/test_analyze_ipa.py'
+      - 'scripts/report_to_inventory.py'
+      - 'scripts/test_report_to_inventory.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -17,3 +19,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/test_analyze_ipa.py
+      - run: python3 scripts/test_report_to_inventory.py
