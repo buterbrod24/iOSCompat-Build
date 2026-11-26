@@ -1,5 +1,5 @@
 import pathlib, tempfile, unittest, zipfile, struct, json
-from analyze_ipa import scan
+from analyze_ipa import scan, map_dependencies
 from macho_imports import read_dependencies, declared_provider
 
 class AnalyzerTest(unittest.TestCase):
@@ -49,6 +49,20 @@ class AnalyzerTest(unittest.TestCase):
             self.assertEqual(row["status"],"missing_unresolved")
             catalog["symbols"]["swift_conformsToProtocol2"]["provider"] = "/wrong"
             self.assertEqual(scan(p,catalog)["images"][0]["imports"][0]["status"],"unknown")
+
+    def test_local_dependency_candidates(self):
+        image = {"path":"Payload/Test.app/Test","rpaths":["@loader_path/Frameworks","@executable_path/Frameworks"],"dependencies":[
+            {"path":"@rpath/A.dylib"},{"path":"@loader_path/Frameworks/B.dylib"},
+            {"path":"@executable_path/Frameworks/A.dylib"},{"path":"/usr/lib/libSystem.B.dylib"},
+            {"path":"@loader_path/../../Outside.dylib"}]}
+        images = [image, {"path":"Payload/Test.app/Frameworks/A.dylib"},{"path":"Payload/Test.app/Frameworks/B.dylib"},{"path":"Outside.dylib"}]
+        map_dependencies(images)
+        deps = image["dependencies"]
+        self.assertEqual(deps[0]["local_candidates"],["Payload/Test.app/Frameworks/A.dylib"])
+        self.assertEqual(deps[1]["resolution"],"local_candidate")
+        self.assertEqual(deps[2]["resolution"],"unresolved_context")
+        self.assertEqual(deps[3]["resolution"],"system_unverified")
+        self.assertEqual(deps[4]["local_candidates"],[])
 
 if __name__ == "__main__":
     unittest.main()
