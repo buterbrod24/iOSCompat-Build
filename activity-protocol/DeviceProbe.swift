@@ -16,7 +16,7 @@ private struct ActivityChecks: View {
                 running = true
                 Task { @MainActor in
                     var rows: [String] = []
-                    func check(_ name: String, _ ok: Bool) {
+                    @MainActor func check(_ name: String, _ ok: Bool) {
                         rows.append("\(ok ? "PASS" : "FAIL") \(name)")
                         report = rows.joined(separator: "\n")
                     }
