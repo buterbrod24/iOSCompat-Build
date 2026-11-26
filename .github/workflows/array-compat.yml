@@ -32,6 +32,20 @@ jobs:
           grep -Eq 'minos[[:space:]]+16\.2$' output-array/build.txt
           codesign --force --sign - "$lib"
           codesign --verify --strict "$lib"
+          client=output-array/libSwiftCoreStockClient.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -O -module-name SwiftCoreStockClient -emit-library array-compat/StockBridge.swift -Xlinker -install_name -Xlinker @rpath/libSwiftCoreStockClient.dylib -Xlinker -rpath -Xlinker @loader_path -Xlinker -fixup_chains -Xlinker -headerpad -Xlinker 0x1000 -o "$client"
+          python3 stock-batch/rebind.py reserve "$client"
+          xcrun nm -um "$client" | tee output-array/stock-imports.txt
+          grep -F 'reserveCapacityyySiFyXl_Ts5' output-array/stock-imports.txt
+          if grep -F 'Ts5' output-array/stock-imports.txt | grep -vF 'reserveCapacityyySiFyXl_Ts5'; then exit 1; fi
+          # Only the self-authored client is built for 17 to force the stock
+          # symbol import. Its deployment marker is then set for the device experiment.
+          xcrun vtool -set-build-version ios 16.2 18.5 -replace -output "$client.lowered" "$client"
+          mv "$client.lowered" "$client"
+          xcrun vtool -show-build "$client" | tee output-array/stock-build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-array/stock-build.txt
+          codesign --force --sign - "$client"
+          codesign --verify --strict "$client"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -5,6 +5,8 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"scripts"))
 import probe_rebind
 from macho_imports import read_imports
 configs={
+ "reserve": (b"/usr/lib/swift/libswiftCore.dylib",b"@rpath/libSwiftCoreCompat.dylib",{
+    "_$ss15ContiguousArrayV15reserveCapacityyySiFyXl_Ts5"}),
  "streams": (b"/usr/lib/swift/libswift_Concurrency.dylib",b"@rpath/libConcurrencyCompat.dylib",{
     "_$sScS10makeStream2of15bufferingPolicyScSyxG6stream_ScS12ContinuationVyx_G12continuationtxm_AG09BufferingE0Oyx__GtFZ",
     "_$sScs10makeStream2of8throwing15bufferingPolicyScsyxs5Error_pG6stream_Scs12ContinuationVyxsAE_p_G12continuationtxm_sAE_pmAI09BufferingF0OyxsAE_p__GtsAE_pRs_rlFZ"}),
