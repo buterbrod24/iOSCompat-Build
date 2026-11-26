@@ -88,17 +88,7 @@ jobs:
           cp unified/Info.plist "$app/Info.plist"
           /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ObservationDeviceProbe' -c 'Set :CFBundleIdentifier net.ioscompat.observationprobe' -c 'Set :CFBundleName ObservationDeviceProbe' -c 'Set :CFBundleDisplayName Observation Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library observation-research/DeviceProbe.swift -o "$app/ObservationDeviceProbe"
-          xcrun vtool -show-build "$app/ObservationDeviceProbe" | grep -Eq 'minos[[:space:]]+16\.2
-        if: always()
-        run: |
-          if test -s "$RUNNER_TEMP/device.txt"; then xcrun simctl shutdown "$(cat "$RUNNER_TEMP/device.txt")" || true; fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: observation-research-evidence
-          path: output/*.txt
-          if-no-files-found: warn
-
+          xcrun vtool -show-build "$app/ObservationDeviceProbe" | grep -Eq 'minos[[:space:]]+16\.2$'
           xcrun otool -L "$app/ObservationDeviceProbe" > output/device-dependencies.txt
           if grep -F 'libswiftObservation.dylib' output/device-dependencies.txt; then exit 1; fi
           codesign --force --sign - "$app/Frameworks/libObservationResearch.dylib"
