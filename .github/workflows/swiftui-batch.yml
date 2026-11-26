@@ -1,0 +1,96 @@
+name: Batched SwiftUI callable and Swift runtime ABI research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'swiftui/**'
+      - 'scripts/check_toolbar_abi.py'
+      - 'scripts/audit_runtime_abi.py'
+      - '.github/workflows/swiftui-batch.yml'
+permissions:
+  contents: read
+jobs:
+  abi:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare stock and legacy toolbar ABI
+        run: |
+          set -euo pipefail
+          mkdir -p output-swiftui
+          python3 -m py_compile scripts/check_toolbar_abi.py scripts/audit_runtime_abi.py
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir swiftui/Stock.swift -o output-swiftui/stock.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir swiftui/Stock.swift -o output-swiftui/backdeploy.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name SwiftUICompat -Onone -emit-ir swiftui/ToolbarCandidate.swift -o output-swiftui/candidate.ll
+          python3 scripts/check_toolbar_abi.py output-swiftui/stock.ll output-swiftui/backdeploy.ll output-swiftui/candidate.ll output-swiftui/aliases.tsv
+          IFS=$'\t' read -r entry target < output-swiftui/aliases.tsv
+          lib=output-swiftui/libSwiftUICompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name SwiftUICompat -Onone -emit-library swiftui/ToolbarCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftUICompat.dylib -Xlinker -alias -Xlinker "$entry" -Xlinker "$target" -o "$lib"
+          xcrun nm -gjU "$lib" | grep -Fx "$target"
+          xcrun vtool -show-build "$lib" | tee output-swiftui/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-swiftui/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-candidate
+          path: output-swiftui/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construct candidate and native toolbar
+        run: |
+          set -euo pipefail
+          mkdir -p output-swiftui-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-swiftui-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-swiftui-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library swiftui/ToolbarCandidate.swift swiftui/Measure.swift -o "$RUNNER_TEMP/measure-toolbar"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/measure-toolbar" | tee output-swiftui-sim/results.txt
+          grep -Fx 'PASS candidate and native toolbar construction/layout' output-swiftui-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-simulator
+          path: output-swiftui-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-swiftui-sim/device.txt; then xcrun simctl shutdown "$(cat output-swiftui-sim/device.txt)" || true; fi
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read public upstream Swift runtime signatures
+        run: |
+          set -euo pipefail
+          mkdir -p output-runtime
+          curl --fail --silent --show-error --location --retry 2 https://raw.githubusercontent.com/swiftlang/swift/swift-5.9-RELEASE/include/swift/Runtime/RuntimeFunctions.def -o "$RUNNER_TEMP/RuntimeFunctions.def"
+          python3 scripts/audit_runtime_abi.py "$RUNNER_TEMP/RuntimeFunctions.def" | tee output-runtime/signatures.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swift-runtime-abi-research
+          path: output-runtime/signatures.txt
+          if-no-files-found: error
