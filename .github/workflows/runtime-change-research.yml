@@ -1,0 +1,50 @@
+name: Runtime declaration evidence and SwiftUI change-state research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/**'
+      - '.github/workflows/runtime-change-research.yml'
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare upstream Swift 5.7 and 5.9 declarations
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          for v in 5.7 5.9; do
+            curl --fail --silent --show-error --location --retry 2 "https://raw.githubusercontent.com/swiftlang/swift/swift-$v-RELEASE/include/swift/Runtime/RuntimeFunctions.def" -o "$RUNNER_TEMP/runtime-$v.def"
+          done
+          python3 research/audit_runtime_pairs.py "$RUNNER_TEMP/runtime-5.7.def" "$RUNNER_TEMP/runtime-5.9.def" output/runtime-pairs.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-declaration-pairs
+          path: output/runtime-pairs.json
+          if-no-files-found: warn
+  swiftui:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify iOS 16.2 source compatibility and run state machine tests
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -typecheck research/LegacyChange.swift
+          xcrun swiftc -swift-version 5 -parse-as-library research/LegacyChange.swift research/MeasureChange.swift -o "$RUNNER_TEMP/change-tests"
+          "$RUNNER_TEMP/change-tests" | tee output/change-results.txt
+          grep -Fx 'TOTAL 10/10' output/change-results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-change-state-research
+          path: output/change-results.txt
+          if-no-files-found: warn
