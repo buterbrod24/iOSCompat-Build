@@ -5,6 +5,9 @@ import Dispatch
 // No new runtime exports or replacement of native protocol descriptors.
 final class QueueExecutor: SerialExecutor, @unchecked Sendable {
     private let queue = DispatchQueue(label: "net.ioscompat.executor.control")
+    func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+        UnownedSerialExecutor(ordinary: self)
+    }
     func enqueue(_ job: UnownedJob) {
         let executor = asUnownedSerialExecutor()
         queue.async { job.runSynchronously(on: executor) }
