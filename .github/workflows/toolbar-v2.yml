@@ -1,0 +1,245 @@
+name: SwiftUI paired toolbar callable and stock client
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'toolbar-v2/**'
+      - '.github/workflows/toolbar-v2.yml'
+permissions:
+  contents: read
+jobs:
+  abi:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare stock and legacy toolbar ABI
+        run: |
+          set -euo pipefail
+          mkdir -p output-toolbar-v2
+          python3 -m py_compile toolbar-v2/check_abi.py
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir toolbar-v2/Stock.swift -o output-toolbar-v2/stock.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir toolbar-v2/Stock.swift -o output-toolbar-v2/backdeploy.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name SwiftUICompat -Onone -emit-ir toolbar-v2/ToolbarCandidate.swift -o output-toolbar-v2/candidate.ll
+          python3 toolbar-v2/check_abi.py output-toolbar-v2/stock.ll output-toolbar-v2/backdeploy.ll output-toolbar-v2/candidate.ll output-toolbar-v2/aliases.tsv
+          args=()
+          while IFS=
+          lib=output-toolbar-v2/libSwiftUICompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name SwiftUICompat -Onone -emit-library toolbar-v2/ToolbarCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftUICompat.dylib "${args[@]}" -o "$lib"
+          while IFS=
+          xcrun vtool -show-build "$lib" | tee output-toolbar-v2/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-toolbar-v2/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+          client=output-toolbar-v2/libSwiftUIToolbarPairStockClient.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-library -module-name SwiftUIToolbarPairStockClient -Xlinker -install_name -Xlinker @rpath/libSwiftUIToolbarPairStockClient.dylib -Xlinker -rpath -Xlinker @loader_path -Xlinker -fixup_chains -Xlinker -headerpad -Xlinker 0x1000 toolbar-v2/StockBridge.swift -o "$client"
+          python3 stock-batch/rebind.py toolbar-pair "$client"
+          codesign --force --sign - "$client"
+          codesign --verify --strict "$client"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-candidate
+          path: output-toolbar-v2/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construct candidate and native toolbar
+        run: |
+          set -euo pipefail
+          mkdir -p output-toolbar-v2-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-toolbar-v2-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-toolbar-v2-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library toolbar-v2/ToolbarCandidate.swift toolbar-v2/Measure.swift -o "$RUNNER_TEMP/measure-toolbar"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/measure-toolbar" | tee output-toolbar-v2-sim/results.txt
+          grep -Fx 'TOTAL 4/4' output-toolbar-v2-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-simulator
+          path: output-toolbar-v2-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-toolbar-v2-sim/device.txt; then xcrun simctl shutdown "$(cat output-toolbar-v2-sim/device.txt)" || true; fi
+\t' read -r entry target; do
+            args+=(-Xlinker -alias -Xlinker "$entry" -Xlinker "$target")
+          done < output-toolbar-v2/aliases.tsv
+          test "$(wc -l < output-toolbar-v2/aliases.tsv | tr -d ' ')" = 2
+          lib=output-toolbar-v2/libSwiftUICompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name SwiftUICompat -Onone -emit-library toolbar-v2/ToolbarCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftUICompat.dylib -Xlinker -alias -Xlinker "$entry" -Xlinker "$target" -o "$lib"
+          xcrun nm -gjU "$lib" | grep -Fx "$target"
+          xcrun vtool -show-build "$lib" | tee output-toolbar-v2/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-toolbar-v2/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-candidate
+          path: output-toolbar-v2/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construct candidate and native toolbar
+        run: |
+          set -euo pipefail
+          mkdir -p output-toolbar-v2-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-toolbar-v2-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-toolbar-v2-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library toolbar-v2/ToolbarCandidate.swift toolbar-v2/Measure.swift -o "$RUNNER_TEMP/measure-toolbar"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/measure-toolbar" | tee output-toolbar-v2-sim/results.txt
+          grep -Fx 'PASS candidate and native toolbar construction/layout' output-toolbar-v2-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-simulator
+          path: output-toolbar-v2-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-toolbar-v2-sim/device.txt; then xcrun simctl shutdown "$(cat output-toolbar-v2-sim/device.txt)" || true; fi
+\t' read -r entry target; do
+            xcrun nm -gjU "$lib" | grep -Fx "$target"
+          done < output-toolbar-v2/aliases.tsv
+          xcrun vtool -show-build "$lib" | tee output-toolbar-v2/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-toolbar-v2/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-candidate
+          path: output-toolbar-v2/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construct candidate and native toolbar
+        run: |
+          set -euo pipefail
+          mkdir -p output-toolbar-v2-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-toolbar-v2-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-toolbar-v2-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library toolbar-v2/ToolbarCandidate.swift toolbar-v2/Measure.swift -o "$RUNNER_TEMP/measure-toolbar"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/measure-toolbar" | tee output-toolbar-v2-sim/results.txt
+          grep -Fx 'PASS candidate and native toolbar construction/layout' output-toolbar-v2-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-simulator
+          path: output-toolbar-v2-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-toolbar-v2-sim/device.txt; then xcrun simctl shutdown "$(cat output-toolbar-v2-sim/device.txt)" || true; fi
+\t' read -r entry target; do
+            args+=(-Xlinker -alias -Xlinker "$entry" -Xlinker "$target")
+          done < output-toolbar-v2/aliases.tsv
+          test "$(wc -l < output-toolbar-v2/aliases.tsv | tr -d ' ')" = 2
+          lib=output-toolbar-v2/libSwiftUICompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name SwiftUICompat -Onone -emit-library toolbar-v2/ToolbarCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftUICompat.dylib -Xlinker -alias -Xlinker "$entry" -Xlinker "$target" -o "$lib"
+          xcrun nm -gjU "$lib" | grep -Fx "$target"
+          xcrun vtool -show-build "$lib" | tee output-toolbar-v2/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-toolbar-v2/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-candidate
+          path: output-toolbar-v2/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construct candidate and native toolbar
+        run: |
+          set -euo pipefail
+          mkdir -p output-toolbar-v2-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-toolbar-v2-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-toolbar-v2-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library toolbar-v2/ToolbarCandidate.swift toolbar-v2/Measure.swift -o "$RUNNER_TEMP/measure-toolbar"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/measure-toolbar" | tee output-toolbar-v2-sim/results.txt
+          grep -Fx 'PASS candidate and native toolbar construction/layout' output-toolbar-v2-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftui-toolbar-pair-simulator
+          path: output-toolbar-v2-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-toolbar-v2-sim/device.txt; then xcrun simctl shutdown "$(cat output-toolbar-v2-sim/device.txt)" || true; fi

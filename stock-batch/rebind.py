@@ -5,6 +5,8 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"scripts"))
 import probe_rebind
 from macho_imports import read_imports
 configs={
+ "toolbar-pair": (b"/System/Library/Frameworks/SwiftUI.framework/SwiftUI",b"@rpath/libSwiftUICompat.dylib",{
+    "_$s7SwiftUI20ToolbarItemPlacementV13topBarLeadingACvgZ","_$s7SwiftUI20ToolbarItemPlacementV14topBarTrailingACvgZ"}),
  "reserve": (b"/usr/lib/swift/libswiftCore.dylib",b"@rpath/libSwiftCoreCompat.dylib",{
     "_$ss15ContiguousArrayV15reserveCapacityyySiFyXl_Ts5"}),
  "streams": (b"/usr/lib/swift/libswift_Concurrency.dylib",b"@rpath/libConcurrencyCompat.dylib",{
