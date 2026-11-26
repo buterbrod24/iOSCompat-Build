@@ -21,6 +21,7 @@ jobs:
           for v in 5.7 5.9; do
             curl --fail --silent --show-error --location --retry 2 "https://raw.githubusercontent.com/swiftlang/swift/swift-$v-RELEASE/include/swift/Runtime/RuntimeFunctions.def" -o "$RUNNER_TEMP/runtime-$v.def"
           done
+          python3 -m py_compile research/audit_runtime_pairs.py
           python3 research/audit_runtime_pairs.py "$RUNNER_TEMP/runtime-5.7.def" "$RUNNER_TEMP/runtime-5.9.def" output/runtime-pairs.json
       - uses: actions/upload-artifact@v4
         if: always()

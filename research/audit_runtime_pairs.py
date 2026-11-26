@@ -29,9 +29,9 @@ def macros(s):
 def parse(path):
     result={}
     for args in macros(pathlib.Path(path).read_text()):
-        name=args[2]
+        name=args[1]
         if name in names or name in {n+"2" for n in names}:
-            result[name]={"module":args[1],"callingConvention":args[3],"availability":args[4],
+            result[name]={"macroID":args[0],"callingConvention":args[2],"availability":args[3],
                           "returns":next((x for x in args if x.startswith("RETURNS(")),None),
                           "arguments":next((x for x in args if x.startswith("ARGS(")),None)}
     return result
@@ -41,7 +41,8 @@ report=[]
 for name in names:
     legacy=old.get(name);modern=new.get(name+"2")
     if not legacy or not modern: raise SystemExit("Missing required upstream evidence: "+name+" "+str((bool(legacy),bool(modern))))
-    same=all(legacy[k]==modern[k] for k in ("callingConvention","returns","arguments"))
+    if not all(row[k] for row in (legacy,modern) for k in ("returns","arguments")): raise SystemExit("Incomplete declaration: "+name)
+    same=all(re.sub(r"\s+","",legacy[k])==re.sub(r"\s+","",modern[k]) for k in ("callingConvention","returns","arguments"))
     print(name, "same declared ABI:",same,"availability:",legacy["availability"],"->",modern["availability"])
     report.append({"symbol":name,"legacy":legacy,"modern":modern,"sameDeclaredABI":same,
                    "status":"RESEARCH_ONLY","reason":"Descriptor and witness semantics not established by matching declarations"})

@@ -1,0 +1,45 @@
+name: Independent stock clients for next unified device suite
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'stock-batch/**'
+      - '.github/workflows/stock-batch.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  stock:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned signed candidates and compile stock clients
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p output-stock "$RUNNER_TEMP/streams" "$RUNNER_TEMP/toolbar"
+          gh run download 45886227557 --repo "$GITHUB_REPOSITORY" --name concurrency-batch-abi --dir "$RUNNER_TEMP/streams"
+          gh run download 45887541378 --repo "$GITHUB_REPOSITORY" --name swiftui-toolbar-candidate --dir "$RUNNER_TEMP/toolbar"
+          for f in "$RUNNER_TEMP/streams/libConcurrencyCompat.dylib" "$RUNNER_TEMP/toolbar/libSwiftUICompat.dylib"; do
+            codesign --verify --strict "$f"
+            cp "$f" output-stock/
+          done
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          for spec in 'streams StreamStock ConcurrencyStockClient' 'toolbar ToolbarStock SwiftUIStockClient'; do
+            read -r kind source module <<< "$spec"
+            lib="output-stock/lib$module.dylib"
+            xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-library -module-name "$module" -Xlinker -install_name -Xlinker "@rpath/lib$module.dylib" -Xlinker -rpath -Xlinker @loader_path -Xlinker -fixup_chains -Xlinker -headerpad -Xlinker 0x1000 "stock-batch/$source.swift" -o "$lib"
+            python3 stock-batch/rebind.py "$kind" "$lib"
+            xcrun nm -um "$lib" | tee "output-stock/$kind-imports.txt"
+            codesign --force --sign - "$lib"
+            codesign --verify --strict "$lib"
+          done
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: unified-stock-client-batch
+          path: output-stock/
+          if-no-files-found: error
