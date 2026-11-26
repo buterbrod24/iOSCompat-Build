@@ -37,6 +37,14 @@ jobs:
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name Observation -emit-library -Onone "$RUNNER_TEMP/abi-source/"*.swift observation-research/PlatformSupport.swift -Xlinker -install_name -Xlinker @rpath/libObservationResearch.dylib -o "$RUNNER_TEMP/candidate.dylib"
           xcrun nm -gjU "$RUNNER_TEMP/candidate.dylib" > "$RUNNER_TEMP/candidate-exports.txt"
           python3 observation-abi/compare.py "$RUNNER_TEMP/stock-imports.txt" "$RUNNER_TEMP/candidate-exports.txt" | tee output/stock-comparison.txt
+      - name: Compare compiler-lowered callable IR shapes
+        run: |
+          set -euo pipefail
+          python3 observation-abi/test_compare_ir.py
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -module-name StockObservationClient -Onone -emit-ir observation-abi/Stock.swift -o "$RUNNER_TEMP/stock.ll"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -whole-module-optimization -module-name Observation -Onone -emit-ir "$RUNNER_TEMP/abi-source/"*.swift observation-research/PlatformSupport.swift -o "$RUNNER_TEMP/candidate.ll"
+          python3 observation-abi/compare_ir.py "$RUNNER_TEMP/stock.ll" "$RUNNER_TEMP/candidate.ll" | tee output/callable-shapes.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
