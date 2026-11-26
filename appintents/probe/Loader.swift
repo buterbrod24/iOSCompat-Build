@@ -21,7 +21,7 @@ import Darwin
         w.rootViewController = host
         window = w
         w.makeKeyAndVisible()
-        log.text = "iOSCompat AppIntents Callable 0.1.0\nOS: \(UIDevice.current.systemVersion)\n"
+        log.text = "iOSCompat AppIntents Callable 0.2.0\nOS: \(UIDevice.current.systemVersion)\n"
         DispatchQueue.main.async {
             var passed = 0
             func check(_ name: String, _ ok: Bool) {
@@ -32,7 +32,7 @@ import Darwin
             guard let dir = Bundle.main.privateFrameworksPath,
                   let h = dlopen(dir + "/libAppIntentsCompat.dylib", RTLD_NOW | RTLD_LOCAL) else {
                 check("Compatibility library loads", false)
-                log.text += "\n" + error() + "\n0/6 total"
+                log.text += "\n" + error() + "\n0/8 total"
                 return
             }
             check("Compatibility library loads", true)
@@ -40,19 +40,25 @@ import Darwin
             check("Default getter resolves", dlsym(h, "$s10AppIntents0A6IntentPAAE14isDiscoverableSbvgZ") != nil)
             guard let stock = dlopen(dir + "/libAppIntentsStockClient.dylib", RTLD_NOW | RTLD_LOCAL) else {
                 check("Independent stock client loads", false)
-                log.text += "\n" + error() + "\n\(passed)/6 total"
+                log.text += "\n" + error() + "\n\(passed)/8 total"
                 return
             }
             check("Independent stock client loads", true)
             guard let entry = dlsym(stock, "ioscompat_stock_shortcut_test") else {
                 check("Stock test entry resolves", false)
-                log.text += "\n\(passed)/6 total"
+                log.text += "\n\(passed)/8 total"
                 return
             }
             check("Stock test entry resolves", true)
             typealias Test = @convention(c) () -> Int32
             check("Stock shortcut construction returns", unsafeBitCast(entry, to: Test.self)() == 1)
-            log.text += "\n\n\(passed)/6 total\n\nDefault getter address checked only. No shortcut registration or intent execution. Protocol descriptors not adapted."
+            if let getter = dlsym(stock, "ioscompat_stock_default_test") {
+                check("Stock default getter returns true", unsafeBitCast(getter, to: Test.self)() == 1)
+            } else { check("Stock default getter entry", false) }
+            if let explicit = dlsym(stock, "ioscompat_stock_explicit_test") {
+                check("Explicit false preserved", unsafeBitCast(explicit, to: Test.self)() == 0)
+            } else { check("Stock explicit getter entry", false) }
+            log.text += "\n\n\(passed)/8 total\n\nConcrete getter calls only. No generic witness dispatch, shortcut registration or intent execution. Protocol descriptors not adapted."
         }
         return true
     }

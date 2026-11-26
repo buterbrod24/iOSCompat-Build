@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'appintents/probe/**'
+      - 'scripts/check_probe_default.py'
       - 'scripts/probe_rebind.py'
       - 'scripts/rebind_callable_probe.py'
       - 'scripts/macho_imports.py'
@@ -36,6 +37,8 @@ jobs:
           cp "$RUNNER_TEMP/candidate/libAppIntentsCompat.dylib" "$app/Frameworks/"
           cp appintents/probe/Info.plist "$app/Info.plist"
           stock="$app/Frameworks/libAppIntentsStockClient.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir -module-name AppIntentsStockClient appintents/probe/StockClient.swift -o "$out/stock.ll"
+          python3 scripts/check_probe_default.py "$out/stock.ll"
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-library -module-name AppIntentsStockClient -Xlinker -install_name -Xlinker @rpath/libAppIntentsStockClient.dylib -Xlinker -rpath -Xlinker @loader_path -Xlinker -fixup_chains -Xlinker -headerpad -Xlinker 0x1000 appintents/probe/StockClient.swift -o "$stock"
           python3 scripts/rebind_callable_probe.py "$stock"
           xcrun nm -um "$stock" | tee "$out/stock-imports.txt"
@@ -44,8 +47,8 @@ jobs:
           for f in "$app"/Frameworks/*.dylib; do codesign --force --sign - "$f"; done
           codesign --force --sign - "$app"
           codesign --verify --deep --strict "$app"
-          (cd build/callable && zip -qry "$out/iOSCompat-AppIntents-Callable-0.1.0.ipa" Payload)
-          unzip -t "$out/iOSCompat-AppIntents-Callable-0.1.0.ipa"
+          (cd build/callable && zip -qry "$out/iOSCompat-AppIntents-Callable-0.2.0.ipa" Payload)
+          unzip -t "$out/iOSCompat-AppIntents-Callable-0.2.0.ipa"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -56,5 +59,7 @@ jobs:
         if: always()
         with:
           name: appintents-callable-probe-diagnostics
-          path: output-appintents-probe/stock-imports.txt
+          path: |
+            output-appintents-probe/stock-imports.txt
+            output-appintents-probe/stock.ll
           if-no-files-found: warn
