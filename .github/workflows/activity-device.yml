@@ -1,0 +1,38 @@
+name: Independent activity protocol device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'activity-protocol/DeviceProbe.swift'
+      - 'activity-protocol/Candidate.swift'
+      - '.github/workflows/activity-device.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build original iOS 16.2 test app
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/Payload/ActivityDeviceProbe.app"
+          mkdir -p "$app" output
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O activity-protocol/Candidate.swift activity-protocol/DeviceProbe.swift -o "$app/ActivityDeviceProbe"
+          xcrun vtool -show-build "$app/ActivityDeviceProbe" | grep -Eq 'minos[[:space:]]+16\.2$'
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ActivityDeviceProbe' -c 'Set :CFBundleIdentifier net.ioscompat.activitydeviceprobe' -c 'Set :CFBundleName ActivityDeviceProbe' -c 'Set :CFBundleDisplayName Activity Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          xcrun nm -um "$app/ActivityDeviceProbe" > "$RUNNER_TEMP/imports.txt"
+          if grep -F 'AppIntents18LiveActivityIntent' "$RUNNER_TEMP/imports.txt"; then exit 1; fi
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build && zip -qry ../output/iOSCompat-ActivityProbe-0.1.0.ipa Payload)
+          unzip -t output/iOSCompat-ActivityProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: activity-device-probe
+          path: output/iOSCompat-ActivityProbe-0.1.0.ipa
+          if-no-files-found: error
