@@ -130,7 +130,7 @@ func require(_ ok: Bool, _ why: String) throws {
                     "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
                     "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq"])
             }
-        ] + batchCases() + activityCases() + runtimeBaselineCases()
+        ] + batchCases() + activityCases() + runtimeBaselineCases() + executorCases()
     }
 
     private var batchHandles: [String: UnsafeMutableRawPointer] = [:]
@@ -249,6 +249,42 @@ func require(_ ok: Bool, _ why: String) throws {
             .init(name:"Activity / perform") {
                 _ = try await LocalActivityIntent().perform()
                 return "local perform completed; no system registration claim"
+            }
+        ]
+    }
+    private func executorCases() -> [ProbeCase] {
+        [
+            .init(name:"Executor / first job") {
+                let actor = ExecutorControl()
+                await actor.increment()
+                let result = await actor.value()
+                try require(result == 1,"first job failed")
+                return "native serial executor control"
+            },
+            .init(name:"Executor / 100 concurrent submissions") {
+                let actor = ExecutorControl()
+                await withTaskGroup(of: Void.self) { group in
+                    for _ in 0..<100 { group.addTask { await actor.increment() } }
+                }
+                let result = await actor.value()
+                try require(result == 100,"lost increments")
+                return "100/100 increments"
+            },
+            .init(name:"Executor / sequential order") {
+                let actor = ExecutorControl()
+                for i in 0..<32 { await actor.append(i) }
+                let result = await actor.snapshot()
+                try require(result == Array(0..<32),"order mismatch")
+                return "32 ordered operations"
+            },
+            .init(name:"Executor / independent actors") {
+                let a = ExecutorControl(), b = ExecutorControl()
+                await a.increment()
+                await a.increment()
+                await b.increment()
+                let av = await a.value(), bv = await b.value()
+                try require(av == 2 && bv == 1,"actor state mismatch")
+                return "independent native actor state; no new runtime ABI claim"
             }
         ]
     }

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'unified/**'
+      - 'executor-research/Checks.swift'
       - 'activity-protocol/Candidate.swift'
       - '.github/workflows/unified-probe.yml'
 permissions:
@@ -55,15 +56,15 @@ jobs:
             xcrun vtool -show-build "$lib" | grep -Eq 'minos[[:space:]]+16\.2$'
           done
           cp unified/Info.plist "$app/Info.plist"
-          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift research/LegacyChange.swift probe-v3-prep/ReserveProbe.swift activity-protocol/Candidate.swift -o "$app/UnifiedProbe"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift research/LegacyChange.swift probe-v3-prep/ReserveProbe.swift activity-protocol/Candidate.swift executor-research/Checks.swift -o "$app/UnifiedProbe"
           xcrun vtool -show-build "$app/UnifiedProbe" | tee "$out/build.txt"
           grep -Eq 'minos[[:space:]]+16\.2$' "$out/build.txt"
           codesign --force --sign - "$app"
           codesign --verify --deep --strict "$app"
-          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.5.0.ipa" Payload)
-          unzip -t "$out/iOSCompat-UnifiedProbe-0.5.0.ipa"
+          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.6.0.ipa" Payload)
+          unzip -t "$out/iOSCompat-UnifiedProbe-0.6.0.ipa"
       - uses: actions/upload-artifact@v4
         with:
           name: unified-device-probe
-          path: output-unified/iOSCompat-UnifiedProbe-0.5.0.ipa
+          path: output-unified/iOSCompat-UnifiedProbe-0.6.0.ipa
           if-no-files-found: error

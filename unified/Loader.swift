@@ -8,8 +8,8 @@ import Foundation
     private let share = UIButton(type:.system)
     private let suite = Suites()
     private var running = false
-    private var reportURL:URL { FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("iOSCompat-UnifiedReport-0.5.0.txt") }
-    private var stateURL:URL { reportURL.deletingLastPathComponent().appendingPathComponent("unified-progress-0.5.0.json") }
+    private var reportURL:URL { FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("iOSCompat-UnifiedReport-0.6.0.txt") }
+    private var stateURL:URL { reportURL.deletingLastPathComponent().appendingPathComponent("unified-progress-0.6.0.json") }
     private struct Progress:Codable { var next = 0; var active:Int?; var lines:[String] = []; var passed = 0; var failed = 0; var evidence = 0; var interrupted = 0 }
     private var progress = Progress()
     func application(_ application:UIApplication,didFinishLaunchingWithOptions options:[UIApplication.LaunchOptionsKey:Any]?=nil)->Bool {
@@ -47,7 +47,7 @@ import Foundation
     }
     private func refresh() {
         let total = suite.cases().count
-        let text = "iOSCompat Unified Probe 0.5.0\nOS: \(UIDevice.current.systemVersion)\nCompleted \(progress.next)/\(total); PASS \(progress.passed); FAIL \(progress.failed); EVIDENCE \(progress.evidence); INTERRUPTED \(progress.interrupted)\n\n" + progress.lines.joined(separator:"\n\n")
+        let text = "iOSCompat Unified Probe 0.6.0\nOS: \(UIDevice.current.systemVersion)\nCompleted \(progress.next)/\(total); PASS \(progress.passed); FAIL \(progress.failed); EVIDENCE \(progress.evidence); INTERRUPTED \(progress.interrupted)\n\n" + progress.lines.joined(separator:"\n\n")
         log.text = text
         do {
             try FileManager.default.createDirectory(at:reportURL.deletingLastPathComponent(),withIntermediateDirectories:true)
