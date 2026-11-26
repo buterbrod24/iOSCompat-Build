@@ -26,3 +26,8 @@ User-reported physical iOS 16.2 device test of build `b4f30fe`: all six local pr
 
 ## Unified Probe 0.4.0
 User-reported physical iOS 16.2 test of build `ae12468`: 35/35 completed, 31 PASS, four read-only evidence groups, zero failures or interruptions. Independent reserve (12/12), stream (6/6), source-level change state (10/10), paired toolbar construction and local activity protocol (6/6) passed. Native LiveActivityIntent and five newer Swift runtime entry points remain absent. No native protocol substitution, visual equivalence, or third-party application compatibility is established. No raw device report is published.
+
+
+### Unified Probe 0.6.0 physical device validation
+
+User-supplied device report: iOS 16.2 (20C65), completed 42/42, PASS 38, EVIDENCE 4, FAIL 0, INTERRUPTED 0. All four executor source-level controls and three native runtime baseline controls passed. Previously tested callable, stream, reserve, toolbar and independent activity controls also passed. Five newer Swift runtime exports remain absent. No claim of native newer executor ABI, protocol identity, or third-party application compatibility. Only aggregate results are published; raw device report is not included.
