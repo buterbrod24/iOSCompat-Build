@@ -1,0 +1,60 @@
+name: AppIntents independent callable device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'appintents/probe/**'
+      - 'scripts/probe_rebind.py'
+      - 'scripts/rebind_callable_probe.py'
+      - 'scripts/macho_imports.py'
+      - '.github/workflows/appintents-device-probe.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned public candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/candidate"
+          gh run download 45884399022 --repo "$GITHUB_REPOSITORY" --name appintents-callable-diagnostics --dir "$RUNNER_TEMP/candidate"
+          codesign --verify --strict "$RUNNER_TEMP/candidate/libAppIntentsCompat.dylib"
+      - name: Build and verify independent test client
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/callable/Payload/AppIntentsCallableProbe.app"
+          out="$PWD/output-appintents-probe"
+          mkdir -p "$app/Frameworks" "$out"
+          cp "$RUNNER_TEMP/candidate/libAppIntentsCompat.dylib" "$app/Frameworks/"
+          cp appintents/probe/Info.plist "$app/Info.plist"
+          stock="$app/Frameworks/libAppIntentsStockClient.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-library -module-name AppIntentsStockClient -Xlinker -install_name -Xlinker @rpath/libAppIntentsStockClient.dylib -Xlinker -rpath -Xlinker @loader_path -Xlinker -fixup_chains -Xlinker -headerpad -Xlinker 0x1000 appintents/probe/StockClient.swift -o "$stock"
+          python3 scripts/rebind_callable_probe.py "$stock"
+          xcrun nm -um "$stock" | tee "$out/stock-imports.txt"
+          grep 'AppShortcut\|0A8Shortcut' "$out/stock-imports.txt" | grep '(from libAppIntentsCompat)'
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O appintents/probe/Loader.swift -o "$app/AppIntentsCallableProbe"
+          for f in "$app"/Frameworks/*.dylib; do codesign --force --sign - "$f"; done
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/callable && zip -qry "$out/iOSCompat-AppIntents-Callable-0.1.0.ipa" Payload)
+          unzip -t "$out/iOSCompat-AppIntents-Callable-0.1.0.ipa"
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: appintents-callable-device-probe
+          path: output-appintents-probe/*.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appintents-callable-probe-diagnostics
+          path: output-appintents-probe/stock-imports.txt
+          if-no-files-found: warn
