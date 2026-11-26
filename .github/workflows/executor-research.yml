@@ -54,7 +54,7 @@ jobs:
           sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
           xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios16.2-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library executor-research/Measure.swift -o "$RUNNER_TEMP/executor-tests"
           xcrun simctl spawn "$device" "$RUNNER_TEMP/executor-tests" | tee output/results.txt
-          grep -Fx 'TOTAL 2/2' output/results.txt
+          grep -Fx 'TOTAL 4/4' output/results.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

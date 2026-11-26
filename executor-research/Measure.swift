@@ -20,6 +20,9 @@ actor ExecutorControl {
         executor.asUnownedSerialExecutor()
     }
     private var count = 0
+    private var sequence: [Int] = []
+    func append(_ value: Int) { sequence.append(value) }
+    func snapshot() -> [Int] { sequence }
     func increment() { count += 1 }
     func value() -> Int { count }
 }
@@ -35,9 +38,15 @@ actor ExecutorControl {
             }
         }
         let total = await actor.value()
-        let rows = [("first job", first == 1), ("100 concurrent submissions", total == 101)]
+        for i in 0..<32 { await actor.append(i) }
+        let sequence = await actor.snapshot()
+        let other = ExecutorControl()
+        await other.increment()
+        let otherCount = await other.value()
+        let originalCount = await actor.value()
+        let rows = [("first job", first == 1), ("100 concurrent submissions", total == 101), ("sequential submissions preserve order", sequence == Array(0..<32)), ("independent actor state", otherCount == 1 && originalCount == 101)]
         for (name, ok) in rows { print("\(ok ? "PASS" : "FAIL") \(name)") }
-        print("TOTAL \(rows.filter { $0.1 }.count)/2")
+        print("TOTAL \(rows.filter { $0.1 }.count)/4")
         if rows.contains(where: { !$0.1 }) { exit(1) }
     }
 }
