@@ -60,10 +60,10 @@ jobs:
           grep -Eq 'minos[[:space:]]+16\.2$' "$out/build.txt"
           codesign --force --sign - "$app"
           codesign --verify --deep --strict "$app"
-          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.4.0.ipa" Payload)
-          unzip -t "$out/iOSCompat-UnifiedProbe-0.4.0.ipa"
+          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.5.0.ipa" Payload)
+          unzip -t "$out/iOSCompat-UnifiedProbe-0.5.0.ipa"
       - uses: actions/upload-artifact@v4
         with:
           name: unified-device-probe
-          path: output-unified/iOSCompat-UnifiedProbe-0.4.0.ipa
+          path: output-unified/iOSCompat-UnifiedProbe-0.5.0.ipa
           if-no-files-found: error

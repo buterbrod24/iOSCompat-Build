@@ -130,7 +130,7 @@ func require(_ ok: Bool, _ why: String) throws {
                     "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
                     "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq"])
             }
-        ] + batchCases() + activityCases()
+        ] + batchCases() + activityCases() + runtimeBaselineCases()
     }
 
     private var batchHandles: [String: UnsafeMutableRawPointer] = [:]
@@ -249,6 +249,30 @@ func require(_ ok: Bool, _ why: String) throws {
             .init(name:"Activity / perform") {
                 _ = try await LocalActivityIntent().perform()
                 return "local perform completed; no system registration claim"
+            }
+        ]
+    }
+    private func runtimeBaselineCases() -> [ProbeCase] {
+        [
+            .init(name:"Runtime / generic metadata identity") {
+                func identity<T>(_ value:T) -> ObjectIdentifier { ObjectIdentifier(T.self) }
+                try require(identity(42) == ObjectIdentifier(Int.self),"Int metadata mismatch")
+                try require(identity("test") == ObjectIdentifier(String.self),"String metadata mismatch")
+                return "native generic metadata positive controls; no new entry point invoked"
+            },
+            .init(name:"Runtime / existential conformance controls") {
+                let values:[Any] = [42, "test", NSObject()]
+                try require(values[0] is any BinaryInteger,"integer conformance absent")
+                try require(!(values[1] is any BinaryInteger),"unexpected integer conformance")
+                try require(values[2] is NSObject,"object cast failed")
+                return "native dynamic conformance controls"
+            },
+            .init(name:"Runtime / opaque result identity") {
+                func opaque() -> some Equatable { 42 }
+                let a = opaque(), b = opaque()
+                try require(a == b,"opaque equality mismatch")
+                try require((a as Any) is Int,"opaque concrete type mismatch")
+                return "native opaque metadata baseline only"
             }
         ]
     }

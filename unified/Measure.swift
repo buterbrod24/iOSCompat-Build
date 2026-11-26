@@ -7,7 +7,7 @@ import Darwin
 import AppIntents
 
 public func measureAppIntents() -> String {
-    var lines = ["iOSCompat AppIntents ABI 0.1.0", "OS: \(ProcessInfo.processInfo.operatingSystemVersionString)"]
+    var lines = ["iOSCompat AppIntents ABI 0.2.0", "OS: \(ProcessInfo.processInfo.operatingSystemVersionString)"]
     guard let h = dlopen("/System/Library/Frameworks/AppIntents.framework/AppIntents", RTLD_NOW | RTLD_LOCAL) else {
         return lines.joined(separator: "\n") + "\nFAIL native AppIntents load"
     }
@@ -47,13 +47,16 @@ public func measureAppIntents() -> String {
             let item = start.advanced(by: i*8)
             let f = item.load(as: UInt32.self)
             let relative = item.load(fromByteOffset: 4, as: Int32.self)
+            let kinds = ["base", "method", "init", "getter", "setter", "read", "modify", "associated-type", "associated-conformance"]
+            let kind = Int(f & 0x0f)
+            let label = kind < kinds.count ? kinds[kind] : "unknown"
             let address = UInt(bitPattern: item)
             let matching = requirements.compactMap { pair -> String? in
                 guard let sym = dlsym(h, pair.1), UInt(bitPattern: sym) == address else { return nil }
                 return pair.0
             }.joined(separator: ",")
             // No dereference of relative implementation or invocation through it.
-            lines.append("  slot \(i): flags=0x\(String(f,radix:16)) default=\(relative != 0) \(matching)")
+            lines.append("  slot \(i): flags=0x\(String(f,radix:16)) kind=\(label) instance=\(f & 0x10 != 0) async=\(f & 0x20 != 0) default-offset-present=\(relative != 0) \(matching)")
         }
     }
     for (name, symbol) in requirements {
