@@ -1,0 +1,47 @@
+name: Observation Darwin host functional controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'observation-host/**'
+      - 'observation-research/PlatformSupport.swift'
+      - 'observation-research/Checks.swift'
+      - '.github/workflows/observation-host.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile isolated host module and test
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/host-source" output
+          root="https://raw.githubusercontent.com/swiftlang/swift/ea95594ae137f288bf29a0b489b8689680a0086a"
+          for file in Observable.swift ObservationRegistrar.swift ObservationTracking.swift; do
+            curl -fsSL "$root/stdlib/public/Observation/Sources/Observation/$file" -o "$RUNNER_TEMP/host-source/$file"
+          done
+          python3 - <<'PY'
+          import os,pathlib
+          for p in (pathlib.Path(os.environ["RUNNER_TEMP"])/"host-source").glob("*.swift"):
+              s=p.read_text()
+              if "@available(SwiftStdlib 5.9, *)" not in s: raise SystemExit("unexpected source")
+              s=s.replace("@available(SwiftStdlib 5.9, *)","@available(macOS 13.0, *)")
+              if p.name=="Observable.swift": s=s.split("#if $Macros && hasAttribute(attached)",1)[0]
+              p.write_text(s)
+          PY
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          xcrun --sdk macosx swiftc -target "$(uname -m)-apple-macos13.0" -sdk "$sdk" -swift-version 5 -parse-as-library -module-name ObservationHostControl -Onone "$RUNNER_TEMP/host-source/"*.swift observation-research/PlatformSupport.swift observation-research/Checks.swift observation-host/HostControls.swift -o "$RUNNER_TEMP/host-tests"
+          xcrun otool -L "$RUNNER_TEMP/host-tests" | tee output/host-dependencies.txt
+          if grep -F 'libswiftObservation.dylib' output/host-dependencies.txt; then exit 1; fi
+          "$RUNNER_TEMP/host-tests" | tee output/host-results.txt
+          grep -Fx 'TOTAL 12/12' output/host-results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observation-host-results
+          path: output/*.txt
+          if-no-files-found: warn
