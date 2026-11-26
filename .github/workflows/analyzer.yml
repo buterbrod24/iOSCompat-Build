@@ -1,0 +1,19 @@
+name: Read-only IPA analyzer tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/analyze_ipa.py'
+      - 'scripts/compat_catalog.json'
+      - 'scripts/macho_imports.py'
+      - 'scripts/test_analyze_ipa.py'
+      - '.github/workflows/analyzer.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/test_analyze_ipa.py

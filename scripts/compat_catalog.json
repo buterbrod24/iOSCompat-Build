@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "target": "16.2",
+  "symbols": {
+    "swift_conformsToProtocol2": {
+      "status": "missing_unresolved",
+      "provider": "/usr/lib/swift/libswiftCore.dylib"
+    },
+    "swift_getOpaqueTypeMetadata2": {
+      "status": "missing_unresolved",
+      "provider": "/usr/lib/swift/libswiftCore.dylib"
+    },
+    "swift_getOpaqueTypeConformance2": {
+      "status": "missing_unresolved",
+      "provider": "/usr/lib/swift/libswiftCore.dylib"
+    },
+    "swift_getTypeByMangledNameInContext2": {
+      "status": "missing_unresolved",
+      "provider": "/usr/lib/swift/libswiftCore.dylib"
+    },
+    "swift_getTypeByMangledNameInContextInMetadataState2": {
+      "status": "missing_unresolved",
+      "provider": "/usr/lib/swift/libswiftCore.dylib"
+    },
+    "$s7SwiftUI20ToolbarItemPlacementV13topBarLeadingACvgZ": {
+      "status": "candidate_device_tested",
+      "provider": "/System/Library/Frameworks/SwiftUI.framework/SwiftUI"
+    },
+    "$s7SwiftUI20ToolbarItemPlacementV14topBarTrailingACvgZ": {
+      "status": "candidate_device_tested",
+      "provider": "/System/Library/Frameworks/SwiftUI.framework/SwiftUI"
+    },
+    "$ss15ContiguousArrayV15reserveCapacityyySiFyXl_Ts5": {
+      "status": "candidate_device_tested",
+      "provider": "/usr/lib/swift/libswiftCore.dylib"
+    },
+    "$sScS10makeStream2of15bufferingPolicyScSyxG6stream_ScS12ContinuationVyx_G12continuationtxm_AG09BufferingE0Oyx__GtFZ": {
+      "status": "candidate_device_tested",
+      "provider": "/usr/lib/swift/libswift_Concurrency.dylib"
+    }
+  }
+}
