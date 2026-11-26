@@ -1,0 +1,77 @@
+name: AppIntents independent live activity protocol research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'activity-protocol/**'
+      - '.github/workflows/activity-protocol.yml'
+permissions:
+  contents: read
+jobs:
+  abi:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare stock and locally declared protocol inheritance
+        run: |
+          set -euo pipefail
+          mkdir -p output-activity
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ActivityStock -Onone -emit-ir activity-protocol/Stock.swift -o "$RUNNER_TEMP/stock.ll"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ActivityCompatResearch -Onone -emit-ir activity-protocol/Candidate.swift -o "$RUNNER_TEMP/candidate.ll"
+          python3 activity-protocol/audit.py "$RUNNER_TEMP/stock.ll" "$RUNNER_TEMP/candidate.ll" output-activity/protocol-evidence.json
+          lib=output-activity/libActivityCompatResearch.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ActivityCompatResearch -Onone -emit-library activity-protocol/Candidate.swift -Xlinker -install_name -Xlinker @rpath/libActivityCompatResearch.dylib -o "$lib"
+          xcrun vtool -show-build "$lib" | tee output-activity/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-activity/build.txt
+          xcrun nm -gjU "$lib" | grep -F 'CompatLiveActivityIntentMp'
+          xcrun nm -um "$lib" | tee output-activity/imports.txt
+          if grep -F 'AppIntents18LiveActivityIntent' output-activity/imports.txt; then exit 1; fi
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: activity-protocol-research
+          path: output-activity/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test stock and local protocol conformance separately
+        run: |
+          set -euo pipefail
+          mkdir -p output-activity-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-activity-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-activity-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library activity-protocol/Candidate.swift activity-protocol/Stock.swift activity-protocol/Measure.swift -o "$RUNNER_TEMP/activity-tests"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/activity-tests" | tee output-activity-sim/results.txt
+          grep -Fx 'TOTAL 10/10' output-activity-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: activity-protocol-simulator
+          path: output-activity-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-activity-sim/device.txt; then xcrun simctl shutdown "$(cat output-activity-sim/device.txt)" || true; fi
