@@ -36,7 +36,7 @@ jobs:
           PY
           sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
           lib="$RUNNER_TEMP/observation/libObservationResearch.dylib"
-          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name Observation -emit-library -Onone "$RUNNER_TEMP/observation/"*.swift observation-research/PlatformSupport.swift -Xlinker -install_name -Xlinker @rpath/libObservationResearch.dylib -o "$lib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name Observation -emit-library -Onone "$RUNNER_TEMP/observation/"*.swift observation-research/PlatformSupport.swift observation-research/Checks.swift observation-research/DeviceBridge.swift -Xlinker -install_name -Xlinker @rpath/libObservationResearch.dylib -o "$lib"
           xcrun vtool -show-build "$lib" | tee output/build.txt
           grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
           xcrun nm -gjU "$lib" > "$RUNNER_TEMP/exports.txt"
@@ -68,7 +68,7 @@ jobs:
           print(max(choices)[2])
           PY
           sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios16.2-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library -module-name ObservationResearchControl -Onone "$RUNNER_TEMP/observation/"*.swift observation-research/PlatformSupport.swift observation-research/Measure.swift -o "$RUNNER_TEMP/observation-tests"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios16.2-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library -module-name ObservationResearchControl -Onone "$RUNNER_TEMP/observation/"*.swift observation-research/PlatformSupport.swift observation-research/Checks.swift observation-research/Measure.swift -o "$RUNNER_TEMP/observation-tests"
           xcrun otool -L "$RUNNER_TEMP/observation-tests" | tee output/simulator-dependencies.txt
           if grep -F 'libswiftObservation.dylib' output/simulator-dependencies.txt; then exit 1; fi
           device="$(cat "$RUNNER_TEMP/device.txt")"
@@ -76,6 +76,41 @@ jobs:
           xcrun simctl bootstatus "$device" -b
           xcrun simctl spawn "$device" "$RUNNER_TEMP/observation-tests" | tee output/simulator-results.txt
           grep -Fx 'TOTAL 8/8' output/simulator-results.txt
+      - name: Package physical device probe only after simulator passes
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/observation/Payload/ObservationDeviceProbe.app"
+          mkdir -p "$app/Frameworks" output-device
+          cp "$RUNNER_TEMP/observation/libObservationResearch.dylib" "$app/Frameworks/"
+          cp "$RUNNER_TEMP/observation/LICENSE.txt" "$app/Observation-LICENSE.txt"
+          cp observation-research/NOTICE.txt "$app/Observation-NOTICE.txt"
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ObservationDeviceProbe' -c 'Set :CFBundleIdentifier net.ioscompat.observationprobe' -c 'Set :CFBundleName ObservationDeviceProbe' -c 'Set :CFBundleDisplayName Observation Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library observation-research/DeviceProbe.swift -o "$app/ObservationDeviceProbe"
+          xcrun vtool -show-build "$app/ObservationDeviceProbe" | grep -Eq 'minos[[:space:]]+16\.2
+        if: always()
+        run: |
+          if test -s "$RUNNER_TEMP/device.txt"; then xcrun simctl shutdown "$(cat "$RUNNER_TEMP/device.txt")" || true; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observation-research-evidence
+          path: output/*.txt
+          if-no-files-found: warn
+
+          xcrun otool -L "$app/ObservationDeviceProbe" > output/device-dependencies.txt
+          if grep -F 'libswiftObservation.dylib' output/device-dependencies.txt; then exit 1; fi
+          codesign --force --sign - "$app/Frameworks/libObservationResearch.dylib"
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/observation && zip -qry "$GITHUB_WORKSPACE/output-device/iOSCompat-ObservationProbe-0.1.0.ipa" Payload)
+          unzip -t output-device/iOSCompat-ObservationProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: observation-device-probe
+          path: output-device/iOSCompat-ObservationProbe-0.1.0.ipa
+          if-no-files-found: error
       - name: Shutdown simulator
         if: always()
         run: |
