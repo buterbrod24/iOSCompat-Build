@@ -1,0 +1,33 @@
+import unittest
+from import_summary import summarize
+
+class SummaryTest(unittest.TestCase):
+    def test_grouping_and_priority(self):
+        def row(symbol, weak=False, native="unknown", status="unknown", provider="/usr/lib/test"):
+            return dict(symbol=symbol,weak=weak,native_export=native,status=status,
+                        declared_provider=provider,catalog_provider_match=status!="unknown")
+        a={"path":"A","cpu_type":0x100000c,"cpu_subtype":0,"complete":True,"imports":[
+            row("_missing",True,"absent"),row("_candidate",False,"absent","candidate_device_tested"),
+            row("_weak",True,"absent"),row("_unknown"),row("_native",False,"present")]}
+        b={"path":"B","cpu_type":0x100000c,"cpu_subtype":0,"complete":False,"imports":[
+            row("_missing",False,"absent"),row("_missing",False,"absent",provider="/usr/lib/other")]}
+        r=summarize([a,b])
+        self.assertEqual(r["unique_import_groups"],6)
+        self.assertEqual(r["counts"]["investigate_required_absence"],2)
+        self.assertEqual(r["counts"]["review_tested_candidate"],1)
+        self.assertEqual(r["counts"]["investigate_weak_absence"],1)
+        self.assertEqual(r["counts"]["native_lookup_present"],1)
+        self.assertEqual(r["counts"]["unknown"],1)
+        self.assertEqual(r["incomplete_images"],["B"])
+        shared=next(x for x in r["items"] if x["images"]==["A","B"])
+        self.assertTrue(shared["required"])
+    def test_conflict_and_architecture(self):
+        row={"symbol":"_x","declared_provider":"/usr/lib/test","native_export":"present",
+             "status":"missing_unresolved","catalog_provider_match":True,"weak":False}
+        a={"path":"A","cpu_type":0x100000c,"cpu_subtype":0,"complete":True,"imports":[row]}
+        b=dict(a,path="B",cpu_subtype=2)
+        r=summarize([a,b])
+        self.assertEqual(r["counts"],{"conflicting_evidence":1,"architecture_unverified":1})
+
+if __name__ == "__main__":
+    unittest.main()

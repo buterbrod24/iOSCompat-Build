@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only inventory of thin Mach-O imports inside an IPA. Unknown is not compatible."""
 import argparse, json, pathlib, sys, zipfile, struct, posixpath
+from import_summary import summarize
 from macho_imports import read_imports, read_dependencies, declared_provider
 
 def validate_inventory(inventory, target):
@@ -29,7 +30,7 @@ def export_evidence(inventory, provider, symbol):
 def scan(path, catalog, inventory=None):
     if inventory is not None:
         validate_inventory(inventory, catalog["target"])
-    result = {"schema": 4, "target": catalog["target"], "images": [], "limitations": [
+    result = {"schema": 5, "target": catalog["target"], "images": [], "limitations": [
         "Local path candidates only; no inherited runpath stack, executable context or dyld cache export inventory",
         "Fat binaries and classical bind streams are not fully decoded",
         "Candidate evidence is not proof of compatibility with this image"]}
@@ -71,6 +72,7 @@ def scan(path, catalog, inventory=None):
     if inventory is not None:
         result["inventory_build"] = inventory["build"]
     map_dependencies(result["images"])
+    result["research_queue"] = summarize(result["images"])
     return result
 
 def map_dependencies(images):
@@ -117,5 +119,7 @@ def main():
     with args.output.open("x", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     print("Images:", len(report["images"]), "; report saved locally")
+    for key, count in sorted(report["research_queue"]["counts"].items()):
+        print(key, count)
 if __name__ == "__main__":
     main()
