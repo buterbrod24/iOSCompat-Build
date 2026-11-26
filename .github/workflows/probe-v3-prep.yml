@@ -1,0 +1,32 @@
+name: Expanded reserve device harness and split SwiftUI SDK audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'probe-v3-prep/**'
+      - '.github/workflows/probe-v3-prep.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate native control and iOS 16.2 harness
+        run: |
+          set -euo pipefail
+          mkdir -p output-prep
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -typecheck probe-v3-prep/ReserveProbe.swift
+          xcrun swiftc -swift-version 5 -O -parse-as-library probe-v3-prep/ReserveProbe.swift probe-v3-prep/Measure.swift -o "$RUNNER_TEMP/reserve-control"
+          "$RUNNER_TEMP/reserve-control" | tee output-prep/reserve-control.txt
+          grep -Fx 'TOTAL 12/12' output-prep/reserve-control.txt
+          python3 probe-v3-prep/audit_ui.py "$sdk" output-prep/swiftui-declarations.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-v3-preparation
+          path: output-prep/
+          if-no-files-found: warn
