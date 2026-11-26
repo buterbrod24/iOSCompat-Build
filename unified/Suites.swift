@@ -45,7 +45,7 @@ func require(_ ok: Bool, _ why: String) throws {
     func cases() -> [ProbeCase] {
         let shortcut = "$s10AppIntents0A8ShortcutV6intent7phrases10shortTitle15systemImageNameACx_SayAA0aC6PhraseVyxGG10Foundation23LocalizedStringResourceVSSYttcAA0A6IntentRzlufC"
         let getter = "$s10AppIntents0A6IntentPAAE14isDiscoverableSbvgZ"
-        return [
+        var tests: [ProbeCase] = [
             .init(name:"AppIntents / load compatibility library") { _ = try self.compatibility(); return "loaded" },
             .init(name:"AppIntents / initializer export") { let h = try self.compatibility(); try require(dlsym(h,shortcut) != nil,"missing"); return "resolved" },
             .init(name:"AppIntents / default export") { let h = try self.compatibility(); try require(dlsym(h,getter) != nil,"missing"); return "resolved" },
@@ -130,7 +130,12 @@ func require(_ ok: Bool, _ why: String) throws {
                     "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
                     "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq"])
             }
-        ] + batchCases() + activityCases() + runtimeBaselineCases() + executorCases()
+        ]
+        tests.append(contentsOf: batchCases())
+        tests.append(contentsOf: activityCases())
+        tests.append(contentsOf: runtimeBaselineCases())
+        tests.append(contentsOf: executorCases())
+        return tests
     }
 
     private var batchHandles: [String: UnsafeMutableRawPointer] = [:]
