@@ -1,0 +1,78 @@
+name: Swift Core typed reserve-capacity ABI candidate
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-compat/**'
+      - '.github/workflows/array-compat.yml'
+permissions:
+  contents: read
+jobs:
+  abi:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate concrete reference-array ABI and build signed candidate
+        run: |
+          set -euo pipefail
+          mkdir -p output-array
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -O -emit-ir array-compat/Stock.swift -o output-array/stock.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O -module-name SwiftCoreCompat -emit-ir array-compat/Candidate.swift -o output-array/candidate.ll
+          python3 array-compat/check_abi.py output-array/stock.ll output-array/candidate.ll output-array/aliases.tsv
+          IFS=$'\t' read -r entry target < output-array/aliases.tsv
+          lib=output-array/libSwiftCoreCompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O -module-name SwiftCoreCompat -emit-library array-compat/Candidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftCoreCompat.dylib -Xlinker -alias -Xlinker "$entry" -Xlinker "$target" -o "$lib"
+          xcrun nm -gjU "$lib" | grep -Fx "$target"
+          xcrun nm -um "$lib" | tee output-array/imports.txt
+          if grep -F 'Ts5' output-array/imports.txt; then exit 1; fi
+          xcrun vtool -show-build "$lib" | tee output-array/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-array/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftcore-reserve-candidate
+          path: output-array/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run reference ownership and mutation checks on iOS simulator
+        run: |
+          set -euo pipefail
+          mkdir -p output-array-sim
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > output-array-sim/device.txt
+          import json,re,os,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-array-sim/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios16.2-simulator" -sdk "$sdk" -swift-version 5 -O -parse-as-library array-compat/Candidate.swift array-compat/Measure.swift -o "$RUNNER_TEMP/reserve-tests"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/reserve-tests" | tee output-array-sim/results.txt
+          grep -Fx 'TOTAL 10/10' output-array-sim/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftcore-reserve-simulator
+          path: output-array-sim/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-array-sim/device.txt; then xcrun simctl shutdown "$(cat output-array-sim/device.txt)" || true; fi
