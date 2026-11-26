@@ -1,0 +1,7 @@
+# Observation back-deployment research
+
+Pinned upstream Swift 5.9 release commit ea95594ae137f288bf29a0b489b8689680a0086a. Source headers and upstream license are retained in the temporary build directory; no upstream code or binary is vendored or distributed by this workflow. The upstream registrar and tracking code are compiled with adjusted availability and an independently implemented platform lock and thread-local storage. The macro declarations are excluded, since runtime behavior rather than macro expansion is under investigation.
+
+The module is named Observation for compiler-generated symbol comparison, but uses an isolated install name libObservationResearch.dylib. The gate checks eight public ABI names, deployment target and absence of a dependency on the native Observation dylib. This is a build experiment only: matching exports cannot establish layout, protocol identity or behavioral compatibility, and the original Swift 5.9 implementation requires separate concurrency and lifetime validation. No system libraries, app binaries, or security mechanisms are modified. No artifact binary is distributed yet.
+
+Related source-level backport: https://github.com/pointfreeco/swift-perception (not incorporated).
