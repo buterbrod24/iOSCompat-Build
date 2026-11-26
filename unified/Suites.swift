@@ -2,6 +2,7 @@ import UIKit
 import SwiftUI
 import Foundation
 import Darwin
+import AppIntents
 
 // Each test returns a result, not a claim that a newer framework was ported.
 struct ProbeCase {
@@ -129,7 +130,7 @@ func require(_ ok: Bool, _ why: String) throws {
                     "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
                     "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq"])
             }
-        ] + batchCases()
+        ] + batchCases() + activityCases()
     }
 
     private var batchHandles: [String: UnsafeMutableRawPointer] = [:]
@@ -220,6 +221,34 @@ func require(_ ok: Bool, _ why: String) throws {
                 let result = unsafeBitCast(entry,to:Test.self)()
                 try require(result == 1,"paired toolbar returned \(result)")
                 return "both rebound stock getters invoked; hosting layout completed, not visual equivalence"
+            }
+        ]
+    }
+    private func activityCases() -> [ProbeCase] {
+        [
+            .init(name:"Activity / inherited generic witness") {
+                try require(localThroughActivity(LocalActivityIntent.self),"local witness returned false")
+                return "independent nominal protocol"
+            },
+            .init(name:"Activity / native SystemIntent dispatch") {
+                try require(localThroughSystem(LocalActivityIntent.self),"native witness returned false")
+                return "native base dispatch"
+            },
+            .init(name:"Activity / positive dynamic cast") {
+                try require(localDynamic(LocalActivityIntent()),"local cast failed")
+                return "local type accepted"
+            },
+            .init(name:"Activity / negative dynamic cast") {
+                try require(!localDynamic(42),"unrelated type accepted")
+                return "unrelated type rejected"
+            },
+            .init(name:"Activity / native SystemIntent conformance") {
+                try require((LocalActivityIntent() as Any) is any SystemIntent,"native base cast failed")
+                return "native base conformance"
+            },
+            .init(name:"Activity / perform") {
+                _ = try await LocalActivityIntent().perform()
+                return "local perform completed; no system registration claim"
             }
         ]
     }
