@@ -1,0 +1,49 @@
+name: AppIntents callable ABI candidates
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'appintents/CallableCandidate.swift'
+      - 'scripts/check_appintents_callable.py'
+      - '.github/workflows/appintents-callable.yml'
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile candidate and compare stock signatures
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/check_appintents_callable.py
+          mkdir -p output-appintents-callable
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir appintents/Reference.swift -o output-appintents-callable/stock.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name AppIntentsCompat -Onone -emit-ir appintents/CallableCandidate.swift -o output-appintents-callable/candidate.ll
+          python3 scripts/check_appintents_callable.py output-appintents-callable/stock.ll output-appintents-callable/candidate.ll output-appintents-callable/aliases.tsv
+      - name: Link and verify exact callable exports
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          args=()
+          while IFS=$'\t' read -r entry target; do
+            args+=(-Xlinker -alias -Xlinker "$entry" -Xlinker "$target")
+          done < output-appintents-callable/aliases.tsv
+          lib=output-appintents-callable/libAppIntentsCompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name AppIntentsCompat -Onone -emit-library appintents/CallableCandidate.swift -Xlinker -install_name -Xlinker @rpath/libAppIntentsCompat.dylib "${args[@]}" -o "$lib"
+          xcrun nm -gjU "$lib" | sort -u > output-appintents-callable/exports.txt
+          while IFS=$'\t' read -r entry target; do grep -Fx "$target" output-appintents-callable/exports.txt; done < output-appintents-callable/aliases.tsv
+          xcrun nm -um "$lib" | tee output-appintents-callable/imports.txt
+          xcrun vtool -show-build "$lib" | tee output-appintents-callable/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-appintents-callable/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appintents-callable-diagnostics
+          path: output-appintents-callable/
+          if-no-files-found: warn
