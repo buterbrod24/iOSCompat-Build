@@ -1,5 +1,5 @@
 import pathlib, tempfile, unittest, zipfile, struct, json
-from analyze_ipa import scan, map_dependencies
+from analyze_ipa import scan, map_dependencies, validate_inventory, export_evidence
 from macho_imports import read_dependencies, declared_provider
 
 class AnalyzerTest(unittest.TestCase):
@@ -63,6 +63,22 @@ class AnalyzerTest(unittest.TestCase):
         self.assertEqual(deps[2]["resolution"],"unresolved_context")
         self.assertEqual(deps[3]["resolution"],"system_unverified")
         self.assertEqual(deps[4]["local_candidates"],[])
+
+    def test_sparse_export_inventory(self):
+        provider = "/usr/lib/swift/libswiftCore.dylib"
+        inventory = {"schema":1,"target":"16.2","build":"20C65","architecture":"arm64",
+                     "providers":{provider:{"symbols":{"swift_conformsToProtocol":"present","swift_conformsToProtocol2":"absent"}}}}
+        validate_inventory(inventory,"16.2")
+        self.assertEqual(export_evidence(inventory,provider,"swift_conformsToProtocol"),"present")
+        self.assertEqual(export_evidence(inventory,provider,"swift_conformsToProtocol2"),"absent")
+        self.assertEqual(export_evidence(inventory,provider,"unlisted"),"unknown")
+        self.assertEqual(export_evidence(inventory,"/usr/lib/other","swift_conformsToProtocol2"),"unknown")
+        self.assertEqual(export_evidence(None,provider,"swift_conformsToProtocol2"),"unknown")
+        with self.assertRaises(ValueError):
+            validate_inventory(inventory,"17.0")
+        inventory["architecture"] = "x86_64"
+        with self.assertRaises(ValueError):
+            validate_inventory(inventory,"16.2")
 
 if __name__ == "__main__":
     unittest.main()

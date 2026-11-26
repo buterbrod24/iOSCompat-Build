@@ -3,8 +3,33 @@
 import argparse, json, pathlib, sys, zipfile, struct, posixpath
 from macho_imports import read_imports, read_dependencies, declared_provider
 
-def scan(path, catalog):
-    result = {"schema": 3, "target": catalog["target"], "images": [], "limitations": [
+def validate_inventory(inventory, target):
+    if inventory.get("schema") != 1 or inventory.get("target") != target:
+        raise ValueError("inventory schema or target mismatch")
+    if inventory.get("architecture") != "arm64":
+        raise ValueError("inventory architecture must be arm64")
+    if not isinstance(inventory.get("build"), str) or not inventory["build"]:
+        raise ValueError("inventory build required")
+    if not isinstance(inventory.get("providers"), dict):
+        raise ValueError("inventory providers required")
+    for path, record in inventory["providers"].items():
+        if not path.startswith(("/usr/lib/", "/System/Library/")):
+            raise ValueError("invalid system provider")
+        if not isinstance(record.get("symbols"), dict):
+            raise ValueError("invalid symbols")
+        if any(value not in ("present", "absent") for value in record["symbols"].values()):
+            raise ValueError("invalid symbol observation")
+
+def export_evidence(inventory, provider, symbol):
+    # Sparse observations only: no negative inference from missing entries.
+    if inventory is None or provider is None:
+        return "unknown"
+    return inventory["providers"].get(provider, {}).get("symbols", {}).get(symbol, "unknown")
+
+def scan(path, catalog, inventory=None):
+    if inventory is not None:
+        validate_inventory(inventory, catalog["target"])
+    result = {"schema": 4, "target": catalog["target"], "images": [], "limitations": [
         "Local path candidates only; no inherited runpath stack, executable context or dyld cache export inventory",
         "Fat binaries and classical bind streams are not fully decoded",
         "Candidate evidence is not proof of compatibility with this image"]}
@@ -30,7 +55,8 @@ def scan(path, catalog):
                     data = magic + f.read()
                     rows, sources, complete = read_imports(data)
                     deps, rpaths = read_dependencies(data)
-                    image.update(sources=sources, complete=complete, imports=[], dependencies=deps, rpaths=rpaths)
+                    cpu, subtype = struct.unpack_from('<II', data, 4)
+                    image.update(sources=sources, complete=complete, imports=[], dependencies=deps, rpaths=rpaths, cpu_type=cpu, cpu_subtype=subtype)
                     for name, ordinal, weak, source in rows:
                         key = name[1:] if name.startswith("_") else name
                         entry = catalog["symbols"].get(key, {})
@@ -38,9 +64,12 @@ def scan(path, catalog):
                         matched = bool(entry) and provider == entry.get("provider")
                         image["imports"].append(dict(symbol=name, ordinal=ordinal, weak=weak, source=source,
                             declared_provider=provider, catalog_provider_match=matched,
+                            native_export=export_evidence(inventory, provider, key) if cpu == 0x100000c and subtype & 0xffffff == 0 else "unknown",
                             status=entry["status"] if matched else "unknown", expected_provider=entry.get("provider")))
                 except (ValueError, struct.error, OSError) as exc:
                     image["error"] = str(exc)
+    if inventory is not None:
+        result["inventory_build"] = inventory["build"]
     map_dependencies(result["images"])
     return result
 
@@ -78,11 +107,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("ipa", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path, required=True)
+    parser.add_argument("--inventory", type=pathlib.Path, help="Local sparse system export observations JSON")
     args = parser.parse_args()
     if args.ipa.resolve() == args.output.resolve():
         parser.error("output must not overwrite input")
     catalog = json.loads((pathlib.Path(__file__).parent / "compat_catalog.json").read_text())
-    report = scan(args.ipa, catalog)
+    inventory = json.loads(args.inventory.read_text()) if args.inventory else None
+    report = scan(args.ipa, catalog, inventory)
     with args.output.open("x", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     print("Images:", len(report["images"]), "; report saved locally")
