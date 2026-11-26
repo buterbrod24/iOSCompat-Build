@@ -13,7 +13,7 @@ if not all(s in stock for s in (native,native_base,system)):
 if native in candidate or native_base in candidate:
     raise SystemExit("Unexpected native LiveActivityIntent dependency in local candidate")
 names=sorted(set(re.findall(r'@"(\$s[^"]+(?:Mp|Tb))"',candidate)))
-defined=set(re.findall(r'^@"(\$s[^"]+)"\s*=\s*(?!external\b)',candidate,re.M))
+defined=set(re.findall(r'^@"(\$s[^"]+)"[ \t]*=[ \t]*(?![ \t]|external\b)',candidate,re.M))
 def demangle(name):
     return subprocess.check_output(["xcrun","swift-demangle","--compact",name],text=True).strip()
 decoded={n:demangle(n) for n in names}
@@ -21,7 +21,7 @@ owner="ActivityCompatResearch.CompatLiveActivityIntent"
 for n,label in decoded.items():
     print(n,label,"defined" if n in defined else "reference")
 protocols=[n for n,label in decoded.items() if n in defined and label=="protocol descriptor for "+owner]
-bases=[n for n,label in decoded.items() if n in defined and owner in label and "AppIntents.SystemIntent" in label and "base descriptor" in label]
+bases=[n for n,label in decoded.items() if n in defined and label == "base conformance descriptor for "+owner+": AppIntents.SystemIntent"]
 if len(protocols)!=1 or len(bases)!=1 or system not in candidate:
     raise SystemExit("Expected one protocol and one base descriptor: "+repr((protocols,bases)))
 report={"stock_protocol":native,"stock_base":native_base,
