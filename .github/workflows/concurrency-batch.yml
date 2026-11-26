@@ -42,7 +42,11 @@ jobs:
         if: always()
         with:
           name: concurrency-batch-abi
-          path: output-concurrency/
+          path: |
+            output-concurrency/libConcurrencyCompat.dylib
+            output-concurrency/exports.txt
+            output-concurrency/build.txt
+            output-concurrency/aliases.tsv
           if-no-files-found: warn
   simulator:
     runs-on: macos-15
@@ -76,7 +80,7 @@ jobs:
         if: always()
         with:
           name: concurrency-batch-simulator
-          path: output-concurrency-simulator/
+          path: output-concurrency-simulator/results.txt
           if-no-files-found: warn
       - name: Shutdown simulator
         if: always()
