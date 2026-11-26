@@ -26,7 +26,15 @@ jobs:
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ActivityCompatResearch -Onone -emit-library activity-protocol/Candidate.swift -Xlinker -install_name -Xlinker @rpath/libActivityCompatResearch.dylib -o "$lib"
           xcrun vtool -show-build "$lib" | tee output-activity/build.txt
           grep -Eq 'minos[[:space:]]+16\.2$' output-activity/build.txt
-          xcrun nm -gjU "$lib" | grep -F 'CompatLiveActivityIntentMp'
+          xcrun nm -gjU "$lib" > "$RUNNER_TEMP/exports.txt"
+          python3 - "$RUNNER_TEMP/exports.txt" output-activity/protocol-evidence.json <<'PY'
+          import json,pathlib,sys
+          names=set(pathlib.Path(sys.argv[1]).read_text().splitlines())
+          report=json.loads(pathlib.Path(sys.argv[2]).read_text())
+          for key in ("local_protocol","local_base"):
+              if "_"+report[key] not in names: raise SystemExit("Missing export: "+key)
+          print("Both independently generated descriptor exports verified")
+          PY
           xcrun nm -um "$lib" | tee output-activity/imports.txt
           if grep -F 'AppIntents18LiveActivityIntent' output-activity/imports.txt; then exit 1; fi
           codesign --force --sign - "$lib"
