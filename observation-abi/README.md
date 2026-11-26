@@ -1,0 +1,1 @@
+Independent SDK client compiled before building the candidate. The audit compares undefined Observation symbols to candidate exports, reports unexercised targets, and does not change any client binary. Matching names do not prove ABI layout or compatibility. No IPA artifacts are distributed here.
