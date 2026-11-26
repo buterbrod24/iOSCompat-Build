@@ -129,7 +129,111 @@ func require(_ ok: Bool, _ why: String) throws {
                     "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
                     "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq"])
             }
+        ] + batchCases()
+    }
+
+    private var batchHandles: [String: UnsafeMutableRawPointer] = [:]
+    private var streamStarted = false
+    func resetBatchAttempt() { streamStarted = false }
+    private func batchHandle(_ name: String) throws -> UnsafeMutableRawPointer {
+        if let h = batchHandles[name] { return h }
+        let h = try open(name)
+        batchHandles[name] = h
+        return h
+    }
+    private func batchCases() -> [ProbeCase] {
+        [
+            .init(name:"Concurrency / new compatibility library loads") {
+                _ = try self.batchHandle("libConcurrencyCompat.dylib")
+                return "loaded"
+            },
+            .init(name:"Concurrency / independent stock client loads") {
+                _ = try self.batchHandle("libConcurrencyCompat.dylib")
+                let h = try self.batchHandle("libConcurrencyStockClient.dylib")
+                try require(dlsym(h,"ioscompat_stock_stream_tests") != nil,"missing independent test entry")
+                return "loaded and entry resolved"
+            },
+            .init(name:"Concurrency / stock makeStream functional batch") {
+                try await self.runStreamBatch()
+            },
+            .init(name:"SwiftUI / new compatibility library loads") {
+                _ = try self.batchHandle("libSwiftUICompat.dylib")
+                return "loaded"
+            },
+            .init(name:"SwiftUI / independent stock client loads") {
+                _ = try self.batchHandle("libSwiftUICompat.dylib")
+                let h = try self.batchHandle("libSwiftUIStockClient.dylib")
+                try require(dlsym(h,"ioscompat_stock_toolbar_test") != nil,"missing independent test entry")
+                return "loaded and entry resolved"
+            },
+            .init(name:"SwiftUI / stock topBarLeading construction") {
+                let h = try self.batchHandle("libSwiftUIStockClient.dylib")
+                guard let entry = dlsym(h,"ioscompat_stock_toolbar_test") else {
+                    throw ProbeFailure.failed("missing stock toolbar entry")
+                }
+                typealias Test = @convention(c) () -> Int32
+                let result = unsafeBitCast(entry,to:Test.self)()
+                try require(result == 1,"toolbar hosting returned \(result)")
+                return "rebound SDK getter invoked; hosting layout completed (not visual equivalence)"
+            },
+            .init(name:"SwiftUI / source-level change state") {
+                try Self.checkChangeState()
+            }
         ]
+    }
+    private func runStreamBatch() async throws -> String {
+        guard !streamStarted else { throw ProbeFailure.failed("Stream batch already attempted in this process; reopen to retry") }
+        let h = try batchHandle("libConcurrencyStockClient.dylib")
+        guard let entry = dlsym(h,"ioscompat_stock_stream_tests") else {
+            throw ProbeFailure.failed("missing independent stream entry")
+        }
+        streamStarted = true
+        let box = StreamResult()
+        // The asynchronous callback owns one retained reference until delivery.
+        // On timeout it remains valid for late delivery; no dangling callback pointer.
+        let context = Unmanaged.passRetained(box).toOpaque()
+        typealias Callback = @convention(c) (UnsafeMutableRawPointer?,Int32) -> Void
+        typealias Test = @convention(c) (UnsafeMutableRawPointer?,Callback) -> Void
+        let callback: Callback = { raw, mask in
+            guard let raw = raw else { return }
+            Unmanaged<StreamResult>.fromOpaque(raw).takeRetainedValue().set(mask)
+        }
+        unsafeBitCast(entry,to:Test.self)(context,callback)
+        for _ in 0..<200 {
+            if let mask = box.get() {
+                let names = ["newest buffering","yield after finish","throwing error propagation","oldest buffering","reference identity","reference stream ends"]
+                let lines = names.enumerated().map { i,name in
+                    "\(mask & (Int32(1) << i) != 0 ? "PASS" : "FAIL") \(name)"
+                }
+                let detail = lines.joined(separator:"\n")
+                try require(mask == 63,"stock mask \(mask)/63\n"+detail)
+                return "6/6 independent SDK subchecks\n"+detail
+            }
+            try await Task.sleep(nanoseconds:50_000_000)
+        }
+        throw ProbeFailure.failed("Stock async completion timed out; reopen before retrying")
+    }
+    private static func checkChangeState() throws -> String {
+        var a = LegacyChangeState<Int>()
+        try require(a.receive(1,initial:false)==nil,"unexpected initial callback")
+        let a2 = a.receive(2,initial:false)
+        try require(a2?.0==1 && a2?.1==2,"old/new mismatch")
+        try require(a.receive(2,initial:false)==nil,"equal values callback")
+        let a3 = a.receive(1,initial:false)
+        try require(a3?.0==2 && a3?.1==1,"change back mismatch")
+        var b = LegacyChangeState<Int>()
+        let b1 = b.receive(7,initial:true)
+        try require(b1?.0==7 && b1?.1==7,"initial pair mismatch")
+        try require(b.receive(7,initial:true)==nil,"repeat initial callback")
+        var c = LegacyChangeState<Int?>()
+        let c1 = c.receive(nil,initial:true)
+        try require(c1 != nil && c1!.0==nil && c1!.1==nil,"initial nil mismatch")
+        let c2 = c.receive(4,initial:false)
+        try require(c2 != nil && c2!.0==nil && c2!.1==4,"nil to value mismatch")
+        let c3 = c.receive(nil,initial:false)
+        try require(c3 != nil && c3!.0==4 && c3!.1==nil,"value to nil mismatch")
+        try require(c.receive(nil,initial:false)==nil,"equal nil callback")
+        return "10/10 source-level state subchecks; no opaque SwiftUI ABI claim"
     }
     private func exports(_ path:String, _ names:[String]) throws -> String {
         guard let h = dlopen(path,RTLD_LAZY|RTLD_LOCAL) else { throw ProbeFailure.failed("native provider unavailable") }
@@ -138,4 +242,12 @@ func require(_ ok: Bool, _ why: String) throws {
             "\(dlsym(h,name) == nil ? "ABSENT" : "PRESENT") \(name)"
         }.joined(separator:"\n")
     }
+}
+
+
+private final class StreamResult: @unchecked Sendable {
+    private let lock = NSLock()
+    private var mask: Int32?
+    func set(_ value:Int32) { lock.lock(); defer { lock.unlock() }; mask = value }
+    func get() -> Int32? { lock.lock(); defer { lock.unlock() }; return mask }
 }
