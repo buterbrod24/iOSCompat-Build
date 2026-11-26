@@ -20,3 +20,6 @@ The earlier independent probe completed all six checks on an iOS 16.2 device, in
 
 ## Unified Probe 0.2.0
 Device report on iOS 16.2: 24/24 completed, 20 PASS, four read-only evidence groups, zero failed or interrupted. Six independent SDK stream subchecks passed; the rebound toolbar getter constructed a hosting controller and completed layout. Ten source-level change-state subchecks passed. This does not establish SwiftUI visual equivalence, opaque modifier ABI compatibility or runtime descriptor compatibility. No raw device report is published.
+
+## Independent Activity Probe 0.1.0
+User-reported physical iOS 16.2 device test of build `b4f30fe`: all six local protocol checks passed (6/6), including inherited generic dispatch, native SystemIntent dispatch, positive and negative casts, native SystemIntent conformance and perform(). Earlier simulator comparison passed 10/10; independent descriptor exports passed the ABI build gate. The local protocol has a distinct nominal identity: these results do not establish native LiveActivityIntent substitution, third-party application compatibility or system registration. No raw device report or screenshot is published.
