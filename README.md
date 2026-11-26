@@ -23,3 +23,6 @@ Device report on iOS 16.2: 24/24 completed, 20 PASS, four read-only evidence gro
 
 ## Independent Activity Probe 0.1.0
 User-reported physical iOS 16.2 device test of build `b4f30fe`: all six local protocol checks passed (6/6), including inherited generic dispatch, native SystemIntent dispatch, positive and negative casts, native SystemIntent conformance and perform(). Earlier simulator comparison passed 10/10; independent descriptor exports passed the ABI build gate. The local protocol has a distinct nominal identity: these results do not establish native LiveActivityIntent substitution, third-party application compatibility or system registration. No raw device report or screenshot is published.
+
+## Unified Probe 0.4.0
+User-reported physical iOS 16.2 test of build `ae12468`: 35/35 completed, 31 PASS, four read-only evidence groups, zero failures or interruptions. Independent reserve (12/12), stream (6/6), source-level change state (10/10), paired toolbar construction and local activity protocol (6/6) passed. Native LiveActivityIntent and five newer Swift runtime entry points remain absent. No native protocol substitution, visual equivalence, or third-party application compatibility is established. No raw device report is published.
