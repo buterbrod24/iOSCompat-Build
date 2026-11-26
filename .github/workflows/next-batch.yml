@@ -1,0 +1,36 @@
+name: Swift reference-array and SwiftUI availability research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'next-batch/**'
+      - '.github/workflows/next-batch.yml'
+permissions:
+  contents: read
+jobs:
+  research:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile independent reference-array clients and inspect SDK attributes
+        run: |
+          set -euo pipefail
+          mkdir -p output-next
+          python3 -m py_compile next-batch/audit_arrays.py next-batch/audit_swiftui.py
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          for v in 16.2 17.0; do
+            xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$v" -sdk "$sdk" -swift-version 5 -parse-as-library -O -emit-ir next-batch/ArrayStock.swift -o "$RUNNER_TEMP/array-$v.ll"
+          done
+          python3 next-batch/audit_arrays.py "$RUNNER_TEMP/array-16.2.ll" "$RUNNER_TEMP/array-17.0.ll" output-next/array-imports.json
+          python3 next-batch/audit_swiftui.py "$sdk" output-next/swiftui-availability.json
+          xcrun swiftc -swift-version 5 -O -parse-as-library next-batch/ArrayStock.swift next-batch/MeasureArray.swift -o "$RUNNER_TEMP/array-test"
+          "$RUNNER_TEMP/array-test" | tee output-next/array-results.txt
+          grep -Fx 'TOTAL 6/6' output-next/array-results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: next-batch-research
+          path: output-next/
+          if-no-files-found: warn
