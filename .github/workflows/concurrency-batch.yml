@@ -1,0 +1,84 @@
+name: Batched concurrency candidate and native SDK research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'concurrency/**'
+      - 'scripts/check_stream_abi.py'
+      - 'scripts/audit_sdk_prerequisites.py'
+      - '.github/workflows/concurrency-batch.yml'
+permissions:
+  contents: read
+jobs:
+  abi:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Research SDK and compare stream signatures
+        run: |
+          set -euo pipefail
+          mkdir -p output-concurrency
+          python3 -m py_compile scripts/check_stream_abi.py scripts/audit_sdk_prerequisites.py
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          python3 scripts/audit_sdk_prerequisites.py "$sdk" output-concurrency/sdk
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -emit-ir concurrency/Stock.swift -o output-concurrency/stock.ll
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ConcurrencyCompat -Onone -emit-ir concurrency/StreamCandidate.swift -o output-concurrency/candidate.ll
+          python3 scripts/check_stream_abi.py output-concurrency/stock.ll output-concurrency/candidate.ll output-concurrency/aliases.tsv
+          args=()
+          while IFS=$'\t' read -r entry target; do
+            args+=(-Xlinker -alias -Xlinker "$entry" -Xlinker "$target")
+          done < output-concurrency/aliases.tsv
+          lib=output-concurrency/libConcurrencyCompat.dylib
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ConcurrencyCompat -Onone -emit-library concurrency/StreamCandidate.swift -Xlinker -install_name -Xlinker @rpath/libConcurrencyCompat.dylib "${args[@]}" -o "$lib"
+          xcrun nm -gjU "$lib" | sort -u > output-concurrency/exports.txt
+          while IFS=$'\t' read -r entry target; do grep -Fx "$target" output-concurrency/exports.txt; done < output-concurrency/aliases.tsv
+          xcrun vtool -show-build "$lib" | tee output-concurrency/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output-concurrency/build.txt
+          codesign --force --sign - "$lib"
+          codesign --verify --strict "$lib"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concurrency-batch-abi
+          path: output-concurrency/
+          if-no-files-found: warn
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare legacy implementation and native stream behavior
+        run: |
+          set -euo pipefail
+          mkdir -p output-concurrency-simulator
+          xcrun simctl list devices available -j > output-concurrency-simulator/devices.json
+          python3 - <<'PY' > output-concurrency-simulator/device.txt
+          import json,re,pathlib
+          choices=[]
+          for runtime,items in json.loads(pathlib.Path("output-concurrency-simulator/devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat output-concurrency-simulator/device.txt)"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios17.0-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library concurrency/StreamCandidate.swift concurrency/Measure.swift -o "$RUNNER_TEMP/measure-streams"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/measure-streams" | tee output-concurrency-simulator/results.txt
+          grep -Fx 'TOTAL 12/12' output-concurrency-simulator/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concurrency-batch-simulator
+          path: output-concurrency-simulator/
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s output-concurrency-simulator/device.txt; then xcrun simctl shutdown "$(cat output-concurrency-simulator/device.txt)" || true; fi
