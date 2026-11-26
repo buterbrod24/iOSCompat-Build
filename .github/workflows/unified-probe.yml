@@ -1,0 +1,47 @@
+name: Unified iOS 16.2 device diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'unified/**'
+      - '.github/workflows/unified-probe.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  unified:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch tested callable bundle and build unified runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          input="$RUNNER_TEMP/callable"
+          app="$PWD/build/unified/Payload/UnifiedProbe.app"
+          out="$PWD/output-unified"
+          mkdir -p "$input" "$app/Frameworks" "$out"
+          gh run download 45885387172 --repo "$GITHUB_REPOSITORY" --name appintents-callable-device-probe --dir "$input"
+          unzip -t "$input/iOSCompat-AppIntents-Callable-0.2.0.ipa"
+          unzip -q "$input/iOSCompat-AppIntents-Callable-0.2.0.ipa" -d "$input/extracted"
+          for lib in libAppIntentsCompat.dylib libAppIntentsStockClient.dylib; do
+            cp "$input/extracted/Payload/AppIntentsCallableProbe.app/Frameworks/$lib" "$app/Frameworks/"
+            codesign --verify --strict "$app/Frameworks/$lib"
+          done
+          cp unified/Info.plist "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift -o "$app/UnifiedProbe"
+          xcrun vtool -show-build "$app/UnifiedProbe" | tee "$out/build.txt"
+          grep -Eq 'minos[[:space:]]+16\.2$' "$out/build.txt"
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.1.0.ipa" Payload)
+          unzip -t "$out/iOSCompat-UnifiedProbe-0.1.0.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-device-probe
+          path: output-unified/iOSCompat-UnifiedProbe-0.1.0.ipa
+          if-no-files-found: error
