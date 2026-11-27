@@ -25,6 +25,20 @@ def validate_inventory(inventory, target):
             raise ValueError("invalid symbols")
         if any(value not in ("present", "absent") for value in record["symbols"].values()):
             raise ValueError("invalid symbol observation")
+        pairs = record.get("lookup_pairs", {})
+        if not isinstance(pairs, dict):
+            raise ValueError("invalid lookup pairs")
+        for name, pair in pairs.items():
+            if not isinstance(pair, dict) or set(pair) != {"first", "tree"} or any(v not in ("present", "absent", "unknown") for v in pair.values()):
+                raise ValueError("invalid lookup pair")
+            observation = record["symbols"].get(name)
+            if observation is not None and (pair["first"] != observation or pair["tree"] != observation):
+                raise ValueError("inconsistent sparse observation")
+
+def lookup_pair(inventory, provider, symbol):
+    if inventory is None or provider is None:
+        return None
+    return inventory["providers"].get(provider, {}).get("lookup_pairs", {}).get(symbol)
 
 def export_evidence(inventory, provider, symbol):
     # Sparse observations only: no negative inference from missing entries.
@@ -78,6 +92,7 @@ def scan(path, catalog, inventory=None, *, metadata=False):
                             declared_provider=provider, catalog_provider_match=matched,
                             library_weak=library_weak, effective_weak=bool(weak or library_weak),
                             native_export=export_evidence(inventory, provider, key) if cpu == 0x100000c and subtype & 0xffffff == 0 else "unknown",
+                            native_lookup_pair=lookup_pair(inventory, provider, key) if cpu == 0x100000c and subtype & 0xffffff == 0 else None,
                             status=entry["status"] if matched else "unknown", expected_provider=entry.get("provider")))
                     if metadata and cpu == 0x100000c and subtype & 0xffffff == 0:
                         image["swift_metadata"] = metadata_inventory.inspect_image(data)

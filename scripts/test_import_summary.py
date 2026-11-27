@@ -46,6 +46,17 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(summarize([a])["counts"],{"investigate_weak_absence":1})
         b=dict(a,path="B",imports=[dict(row,library_weak=False)])
         self.assertEqual(summarize([a,b])["counts"],{"investigate_required_absence":1})
+    def test_lookup_scope_difference(self):
+        row=dict(symbol="_x",declared_provider="/usr/lib/test",native_export="unknown",
+                 status="missing_unresolved",catalog_provider_match=True,
+                 native_lookup_pair={"first":"absent","tree":"present"})
+        image=dict(path="A",cpu_type=0x100000c,cpu_subtype=0,complete=True,imports=[row])
+        r=summarize([image])
+        self.assertEqual(r["counts"],{"review_lookup_scope_difference":1})
+        self.assertEqual(r["items"][0]["lookup_pairs"],[row["native_lookup_pair"]])
+        row["native_lookup_pair"]={"first":"present","tree":"absent"}
+        self.assertEqual(summarize([image])["counts"],{"conflicting_evidence":1})
+        self.assertEqual(summarize([dict(image,cpu_subtype=2)])["counts"],{"architecture_unverified":1})
     def test_conflict_and_architecture(self):
         row={"symbol":"_x","declared_provider":"/usr/lib/test","native_export":"present",
              "status":"missing_unresolved","catalog_provider_match":True,"weak":False}
