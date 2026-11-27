@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/analyze_ipa.py'
+      - 'scripts/system_context_queue.py'
+      - 'scripts/test_system_context_queue.py'
       - 'scripts/local_symbol_query.py'
       - 'scripts/test_local_symbol_query.py'
       - 'scripts/dependency_context.py'
@@ -108,3 +110,5 @@ jobs:
       - run: python3 scripts/test_dependency_context.py
 
       - run: python3 scripts/test_local_symbol_query.py
+
+      - run: python3 scripts/test_system_context_queue.py

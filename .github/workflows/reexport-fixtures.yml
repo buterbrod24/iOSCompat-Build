@@ -36,7 +36,7 @@ jobs:
           app="$dir/Payload/Test.app"
           mkdir -p "$app/Frameworks"
           cp "$dir/"*.dylib "$app/Frameworks/"
-          xcrun --sdk iphoneos clang -target arm64-apple-ios16.2 -isysroot "$sdk" reexport-fixtures/Consumer.c "$dir/libFacade.dylib" -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,"$dir" -o "$app/Test"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios16.2 -isysroot "$sdk" reexport-fixtures/Consumer.c "$dir/libFacade.dylib" "$dir/libLeaf.dylib" -Wl,-rpath,@executable_path/Frameworks -o "$app/Test"
           (cd "$dir" && zip -qr "$RUNNER_TEMP/local-fixture.ipa" Payload)
           python3 scripts/local_symbol_query.py "$RUNNER_TEMP/local-fixture.ipa" --root Payload/Test.app/Test --symbol _ioscompat_leaf_value --output output/local-query.json
           python3 - <<'PY'
