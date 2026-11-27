@@ -11,3 +11,6 @@ Apple's WWDC23 trait system session (https://developer.apple.com/videos/play/wwd
 
 ## Priorities
 First collect the already-built Array Probe 0.1.0 report, then evaluate the exact specialization lookup and ABI constraints. In parallel study stream factory compiler behavior. Focus on meaningful independently testable APIs, not fake exports. The previous Observation legacy reactive bridge CI is successful (run 46044333483); its source-level Combine bridge is not a native SwiftUI binary substitute. No system libraries modified.
+
+## Measured compiler result
+Run 46044612245, Apple Swift 6.1.2: both factory names are weak undefined externals in iOS 16.2 objects (-Onone and -O) and ordinary undefined externals in iOS 17.0 objects. SE-0376 and the Swift language guide describe compiler-emitted availability dispatch and fallback functions. Object imports alone do not prove a specific client's fallback path. Analyzer schema 6 records symbol and library weakness separately and uses their union for research triage, matching the prior offline audit convention. Weak references still require execution-path review. No existing binary is modified.

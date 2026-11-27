@@ -17,7 +17,7 @@ def summarize(images):
                 "target_architecture_match":applicable,"images":set(),"required":False,
                 "observations":set(),"catalog_statuses":set()})
             item["images"].add(path)
-            item["required"] |= not row.get("weak", False)
+            item["required"] |= not (row.get("weak", False) or row.get("library_weak", False))
             item["observations"].add(row.get("native_export","unknown") if applicable else "unknown")
             item["catalog_statuses"].add(row.get("status","unknown") if applicable and row.get("catalog_provider_match") else "unknown")
     rows = []

@@ -39,6 +39,13 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(summarize([image])["counts"],{"review_independent_device_tested_candidate":1})
         self.assertEqual(summarize([dict(image,cpu_subtype=2)])["counts"],{"architecture_unverified":1})
         self.assertEqual(summarize([dict(image,imports=[dict(row,catalog_provider_match=False)])])["counts"],{"unknown":1})
+    def test_mixed_weak_library_and_strong_references(self):
+        row={"symbol":"_x","declared_provider":"/usr/lib/test","native_export":"absent",
+             "status":"unknown","catalog_provider_match":False,"weak":False,"library_weak":True}
+        a={"path":"A","cpu_type":0x100000c,"cpu_subtype":0,"complete":True,"imports":[row]}
+        self.assertEqual(summarize([a])["counts"],{"investigate_weak_absence":1})
+        b=dict(a,path="B",imports=[dict(row,library_weak=False)])
+        self.assertEqual(summarize([a,b])["counts"],{"investigate_required_absence":1})
     def test_conflict_and_architecture(self):
         row={"symbol":"_x","declared_provider":"/usr/lib/test","native_export":"present",
              "status":"missing_unresolved","catalog_provider_match":True,"weak":False}

@@ -15,10 +15,13 @@ def main():
             imports = set(prefix.with_suffix(prefix.suffix + ".imports").read_text().splitlines())
             details = prefix.with_suffix(prefix.suffix + ".details").read_text().splitlines()
             for name, symbol in TARGETS.items():
-                print(f"{os} {mode} {name}: {'DIRECT_IMPORT' if symbol in imports else 'NO_EXACT_IMPORT'}")
-                for line in details:
-                    if line.split() and line.split()[-1] == symbol:
-                        print("  " + line.strip())
+                matches = [line for line in details if line.split() and line.split()[-1] == symbol and "(undefined)" in line]
+                strength = "UNKNOWN"
+                if symbol in imports and len(matches) == 1:
+                    strength = "WEAK" if " weak external " in (" " + matches[0].strip() + " ") else "STRONG" if " external " in (" " + matches[0].strip() + " ") else "UNKNOWN"
+                print(f"{os} {mode} {name}: {'DIRECT_IMPORT' if symbol in imports else 'NO_EXACT_IMPORT'} {strength}")
+                for line in matches:
+                    print("  " + line.strip())
             print("  undefined symbols:", len(imports))
     print("Scope: compiler-generated object imports, not a loaded image or runtime execution.")
     print("No exact import does not prove that the fallback is correct or has no newer dependencies.")

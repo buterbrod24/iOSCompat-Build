@@ -30,7 +30,7 @@ def export_evidence(inventory, provider, symbol):
 def scan(path, catalog, inventory=None):
     if inventory is not None:
         validate_inventory(inventory, catalog["target"])
-    result = {"schema": 5, "target": catalog["target"], "images": [], "limitations": [
+    result = {"schema": 6, "target": catalog["target"], "images": [], "limitations": [
         "Local path candidates only; no inherited runpath stack, executable context or dyld cache export inventory",
         "Fat binaries and classical bind streams are not fully decoded",
         "Candidate evidence is not proof of compatibility with this image"]}
@@ -63,8 +63,10 @@ def scan(path, catalog, inventory=None):
                         entry = catalog["symbols"].get(key, {})
                         provider = declared_provider(deps, ordinal, source)
                         matched = bool(entry) and provider == entry.get("provider")
+                        library_weak = provider is not None and 1 <= ordinal <= len(deps) and deps[ordinal-1]["kind"] == "weak"
                         image["imports"].append(dict(symbol=name, ordinal=ordinal, weak=weak, source=source,
                             declared_provider=provider, catalog_provider_match=matched,
+                            library_weak=library_weak, effective_weak=bool(weak or library_weak),
                             native_export=export_evidence(inventory, provider, key) if cpu == 0x100000c and subtype & 0xffffff == 0 else "unknown",
                             status=entry["status"] if matched else "unknown", expected_provider=entry.get("provider")))
                 except (ValueError, struct.error, OSError) as exc:
