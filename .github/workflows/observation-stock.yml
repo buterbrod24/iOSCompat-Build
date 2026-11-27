@@ -1,0 +1,72 @@
+name: Observation independent stock execution
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'observation-stock/**'
+      - 'observation-research/PlatformSupport.swift'
+      - '.github/workflows/observation-stock.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile independent Apple SDK object and run native baseline
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stock-run" "$RUNNER_TEMP/stock-source" output
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          target="$(uname -m)-apple-macos14.0"
+          xcrun --sdk macosx swiftc -target "$target" -sdk "$sdk" -swift-version 5 -parse-as-library -module-name StockObservationExecution -Onone -emit-object observation-stock/StockExecution.swift -o "$RUNNER_TEMP/stock-run/stock.o"
+          shasum -a 256 "$RUNNER_TEMP/stock-run/stock.o" > "$RUNNER_TEMP/stock-object.sha"
+          xcrun --sdk macosx swiftc -target "$target" -sdk "$sdk" "$RUNNER_TEMP/stock-run/stock.o" -o "$RUNNER_TEMP/stock-run/native"
+          xcrun otool -L "$RUNNER_TEMP/stock-run/native" | tee output/native-dependencies.txt
+          grep -F '/usr/lib/swift/libswiftObservation.dylib' output/native-dependencies.txt
+          "$RUNNER_TEMP/stock-run/native" | tee output/native-results.txt
+          grep -Fx 'TOTAL 10/10' output/native-results.txt
+      - name: Build candidate separately and link unchanged stock object
+        run: |
+          set -euo pipefail
+          root="https://raw.githubusercontent.com/swiftlang/swift/ea95594ae137f288bf29a0b489b8689680a0086a"
+          for file in Observable.swift ObservationRegistrar.swift ObservationTracking.swift; do
+            curl -fsSL "$root/stdlib/public/Observation/Sources/Observation/$file" -o "$RUNNER_TEMP/stock-source/$file"
+          done
+          python3 - <<'PY'
+          import os,pathlib
+          for p in (pathlib.Path(os.environ["RUNNER_TEMP"])/"stock-source").glob("*.swift"):
+              s=p.read_text()
+              if "@available(SwiftStdlib 5.9, *)" not in s: raise SystemExit("unexpected source")
+              s=s.replace("@available(SwiftStdlib 5.9, *)","@available(macOS 13.0, *)")
+              if p.name=="Observable.swift": s=s.split("#if $Macros && hasAttribute(attached)",1)[0]
+              p.write_text(s)
+          PY
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          dir="$RUNNER_TEMP/stock-run"
+          xcrun --sdk macosx swiftc -target "$(uname -m)-apple-macos13.0" -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name Observation -emit-library -Onone "$RUNNER_TEMP/stock-source/"*.swift observation-research/PlatformSupport.swift -Xlinker -install_name -Xlinker @rpath/libObservationResearch.dylib -o "$dir/libObservationResearch.dylib"
+          ln -s libObservationResearch.dylib "$dir/libswiftObservation.dylib"
+          shasum -a 256 -c "$RUNNER_TEMP/stock-object.sha"
+          xcrun --sdk macosx swiftc -target "$(uname -m)-apple-macos14.0" -sdk "$sdk" "$dir/stock.o" -L "$dir" -lswiftObservation -Xlinker -rpath -Xlinker @executable_path -o "$dir/candidate"
+          xcrun otool -L "$dir/candidate" | tee output/candidate-dependencies.txt
+          grep -F '@rpath/libObservationResearch.dylib' output/candidate-dependencies.txt
+          if grep -F '/usr/lib/swift/libswiftObservation.dylib' output/candidate-dependencies.txt; then exit 1; fi
+          xcrun nm -um "$dir/candidate" | grep 'Observation' | tee output/candidate-bindings.txt
+          python3 - <<'PY'
+          import pathlib
+          rows=[l for l in pathlib.Path("output/candidate-bindings.txt").read_text().splitlines() if "_$s11Observation" in l]
+          if not rows or any("from libObservationResearch" not in l for l in rows):
+              raise SystemExit("candidate symbol provider not verified")
+          print("Verified candidate bindings:",len(rows))
+          PY
+          "$dir/candidate" | tee output/candidate-results.txt
+          grep -Fx 'TOTAL 10/10' output/candidate-results.txt
+          diff -u output/native-results.txt output/candidate-results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observation-stock-execution-evidence
+          path: output/*.txt
+          if-no-files-found: warn
