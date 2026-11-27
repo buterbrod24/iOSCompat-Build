@@ -135,6 +135,18 @@ func require(_ ok: Bool, _ why: String) throws {
         tests.append(contentsOf: activityCases())
         tests.append(contentsOf: runtimeBaselineCases())
         tests.append(contentsOf: executorCases())
+        tests.append(.init(name:"Metadata / registry controls") {
+            let rows = UnifiedRegistryChecks.run()
+            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
+            try require(rows.count == 10 && rows.allSatisfy { $0.1 }, detail)
+            return "10/10 source-level registry subchecks\n" + detail
+        })
+        tests.append(.init(name:"Metadata / textual mangled lookup") {
+            let rows = UnifiedMangledChecks.run()
+            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
+            try require(rows.count == 12 && rows.allSatisfy { $0.1 }, detail)
+            return "12/12 textual lookup subchecks\n" + detail
+        })
         return tests
     }
 
