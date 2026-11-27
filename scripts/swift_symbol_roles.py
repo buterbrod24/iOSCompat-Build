@@ -39,8 +39,25 @@ def demangle(names,tool="swift-demangle"):
             children=re.findall(r"^    kind=(\w+)",block,re.M)
             role=classify(nodes,children) if roots==["Global"] else "unclassified"
             result.append({"symbol":expected,"nodes":nodes,"role":role,
-                           "label":lines[-1] if len(lines)>1 else expected})
+                           "label":block.strip().splitlines()[-1] if len(lines)>1 else expected})
     return result
+
+def opaque_pairs(rows):
+    """Match only exact QOMQ spellings corroborated by the compiler's decoded label."""
+    index={r["symbol"]:r for r in rows}
+    pairs=[]
+    unmatched=[]
+    for row in rows:
+        if row["nodes"]!=["OpaqueTypeDescriptor"]: continue
+        name=row["symbol"]
+        owner=index.get(name[:-4]) if name.endswith("QOMQ") else None
+        if (owner and owner["role"]=="ordinary_callable"
+                and row["label"]=="opaque type descriptor for <<opaque return type of "+owner["label"]+">>"):
+            pairs.append({"callable":owner["symbol"],"descriptor":name})
+        else:
+            unmatched.append(name)
+    return {"pairs":pairs,"unmatched_descriptors":unmatched,
+            "scope":"Exact name and demangled label association within supplied list; not a full metadata dependency graph"}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -50,7 +67,7 @@ def main():
     rows=demangle(a.symbols.read_text().splitlines(),a.demangler)
     print(json.dumps({"roles":dict(collections.Counter(r["role"] for r in rows)),
                       "nodes":dict(collections.Counter("+".join(r["nodes"]) or "unknown" for r in rows)),
-                      "symbols":rows,
+                      "symbols":rows,"opaque_relationships":opaque_pairs(rows),
                       "scope":"Demangler structural evidence only; no ABI compatibility or implementation feasibility verdict"},indent=2))
 if __name__=="__main__":
     main()

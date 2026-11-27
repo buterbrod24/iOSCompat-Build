@@ -17,5 +17,9 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set -euo pipefail
-          swift-demangle --version
+          demangler="$(xcrun --find swift-demangle)"
+          test -x "$demangler"
+          export PATH="$(dirname "$demangler"):$PATH"
+          command -v swift-demangle
+          xcrun swiftc --version
           python3 scripts/test_swift_symbol_roles.py
