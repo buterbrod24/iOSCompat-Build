@@ -1,0 +1,3 @@
+# Public array ownership baseline
+
+Twelve controls exercise native Array, ContiguousArray, NSArray bridging, the previously tested typed reserveCapacity adapter, reference identity, copy-on-write, 512 weak lifetime observations, and 128 repeated mutations. macOS debug/optimized output must agree. The iOS 16.2 ARM64 build checks deployment and excludes new Ts5 specialized imports; it is not executed on the device by this workflow. These are native public API controls, not implementations or tests of the internal specialized functions. No private buffer layout, alias, or system replacement is used.

@@ -1,0 +1,42 @@
+name: Swift Core array ownership controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-ownership/**'
+      - 'array-compat/Candidate.swift'
+      - '.github/workflows/array-ownership.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run native public API controls with and without optimization
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          for mode in Onone O; do
+            xcrun swiftc -swift-version 5 -parse-as-library "-$mode" array-compat/Candidate.swift array-ownership/Checks.swift array-ownership/Measure.swift -o "$RUNNER_TEMP/array-$mode"
+            "$RUNNER_TEMP/array-$mode" | tee "output/$mode.txt"
+            grep -Fx 'TOTAL 12/12' "output/$mode.txt"
+          done
+          diff -u output/Onone.txt output/O.txt
+      - name: Verify iOS 16.2 source build without new specialized imports
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O array-compat/Candidate.swift array-ownership/Checks.swift array-ownership/Measure.swift -o "$RUNNER_TEMP/array-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/array-ios" | tee output/ios-build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/ios-build.txt
+          xcrun nm -um "$RUNNER_TEMP/array-ios" > output/ios-imports.txt
+          if grep -F 'Ts5' output/ios-imports.txt; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftcore-array-ownership-evidence
+          path: output/*.txt
+          if-no-files-found: warn
