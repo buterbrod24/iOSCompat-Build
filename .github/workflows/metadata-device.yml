@@ -1,0 +1,53 @@
+name: Native metadata identity and physical device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'metadata-device/**'
+      - '.github/workflows/metadata-device.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host controls
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          for opt in Onone O; do
+            xcrun swiftc -swift-version 5 -parse-as-library "-$opt" metadata-device/Checks.swift metadata-device/Measure.swift -o "$RUNNER_TEMP/measure-$opt"
+            "$RUNNER_TEMP/measure-$opt" | tee "output/host-$opt.txt"
+            grep -Fx 'TOTAL 12/12' "output/host-$opt.txt"
+          done
+      - name: Build original iOS 16.2 diagnostic app
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/metadata-device/Payload/MetadataDeviceProbe.app"
+          mkdir -p "$app"
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable MetadataDeviceProbe' -c 'Set :CFBundleIdentifier net.ioscompat.metadatadeviceprobe' -c 'Set :CFBundleName MetadataDeviceProbe' -c 'Set :CFBundleDisplayName Metadata Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O metadata-device/Checks.swift metadata-device/DeviceProbe.swift -o "$app/MetadataDeviceProbe"
+          xcrun vtool -show-build "$app/MetadataDeviceProbe" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$app/MetadataDeviceProbe" > output/imports.txt
+          if grep -E 'swift_(conformsToProtocol2|getOpaqueTypeMetadata2|getOpaqueTypeConformance2|getTypeByMangledNameInContext2|getTypeByMangledNameInContextInMetadataState2)([[:space:]]|$)' output/imports.txt; then exit 1; fi
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/metadata-device && zip -qry "$GITHUB_WORKSPACE/output/iOSCompat-MetadataProbe-0.1.0.ipa" Payload)
+          unzip -t output/iOSCompat-MetadataProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metadata-device-probe
+          path: output/iOSCompat-MetadataProbe-0.1.0.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metadata-device-evidence
+          path: output/*.txt
+          if-no-files-found: warn
