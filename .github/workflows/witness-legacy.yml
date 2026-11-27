@@ -1,0 +1,36 @@
+name: Legacy Swift conformance lookup fixture
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'metadata-compat/WitnessLegacyProbe.swift'
+      - 'metadata-compat/WitnessFixture.swift'
+      - '.github/workflows/witness-legacy.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -enable-library-evolution -module-name WitnessFixture -emit-library -emit-module -emit-module-path output/WitnessFixture.swiftmodule metadata-compat/WitnessFixture.swift -Xlinker -install_name -Xlinker @rpath/libWitnessFixture.dylib -o output/libWitnessFixture.dylib
+          xcrun nm -gjU output/libWitnessFixture.dylib | tee output/exports.txt
+          grep -Fx '_$s14WitnessFixture14CompatReadableMp' output/exports.txt
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -I output -L output -lWitnessFixture -Xlinker -rpath -Xlinker @loader_path metadata-compat/WitnessLegacyProbe.swift -o output/legacy-probe
+          for file in output/legacy-probe output/libWitnessFixture.dylib; do
+            xcrun vtool -show-build "$file" | tee "$file-build.txt"
+            grep -Eq 'minos[[:space:]]+16\.2$' "$file-build.txt"
+            codesign --force --sign - "$file"
+            codesign --verify --strict "$file"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: legacy-witness-fixture
+          path: output/
+          if-no-files-found: error

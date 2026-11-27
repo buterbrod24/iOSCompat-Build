@@ -1,0 +1,3 @@
+# Legacy conformance lookup experiment
+
+Build-only ARM64 iOS 16.2 fixture probes the original runtime entrypoint using compiler-owned metatypes and the exact exported descriptor of our own protocol. Six proposed checks compare positive and negative lookup, repeat identity and public dispatch. No witness pointer is dereferenced. This is a private runtime call experiment, not a supported API, not an implementation of swift_conformsToProtocol2, and not a test of signed descriptor semantics. Do not use with arbitrary descriptors or arm64e. CI does not execute this iOS command-line fixture; physical execution requires a suitable harness. Build and runtime results pending.
