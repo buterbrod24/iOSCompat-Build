@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "component": "Observation",
+  "version": "0.2.0",
+  "architecture": "arm64",
+  "minimum_ios": "16.2",
+  "install_name": "@rpath/libObservationResearch.dylib",
+  "source_artifact_id": 15210454927,
+  "source_workflow_run": 46025206294,
+  "source_commit": "a4ae03a1f30107abc589d9cde406dfbdf0baee39",
+  "artifact_sha256": "ad6c879c37aeb3bc9230d4195b2229e14a87585ae903e5d26ca87fe2e062f807",
+  "ipa_sha256": "fe4874d75de462a64d7af30a5919e7c9abbfcbd26980d49e4da9fc4c474bf0c7",
+  "library_sha256": "31ac9006bffe5f3d75f3e6020ad637415788849fe2e1d13ee20ddc69de7721cb",
+  "library_bytes": 187296,
+  "dependencies": [
+    "/usr/lib/libSystem.B.dylib",
+    "/usr/lib/libobjc.A.dylib",
+    "/usr/lib/swift/libswiftCore.dylib",
+    "/usr/lib/swift/libswiftDarwin.dylib"
+  ],
+  "validation": {
+    "physical_ios": "16.2 (20C65)",
+    "independent_client_tests": "10/10",
+    "runtime_export_lookups": "9/9",
+    "scope": "Tested original Probe 0.2.0 client; no arbitrary app compatibility claim."
+  }
+}
