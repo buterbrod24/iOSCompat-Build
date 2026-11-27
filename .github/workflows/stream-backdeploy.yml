@@ -6,6 +6,7 @@ on:
     paths:
       - 'stream-backdeploy/**'
       - 'scripts/backdeploy_markers.py'
+      - 'scripts/deployment_metadata.py'
       - '.github/workflows/stream-backdeploy.yml'
 permissions:
   contents: read
