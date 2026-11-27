@@ -1,0 +1,38 @@
+name: Scroll target policy and SDK import research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scroll-research/**'
+      - '.github/workflows/scroll-research.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -swift-version 5 -parse-as-library -O scroll-research/Targets.swift scroll-research/Measure.swift -o "$RUNNER_TEMP/measure"
+          "$RUNNER_TEMP/measure" | tee output/controls.txt
+          grep -Fx 'TOTAL 14/14' output/controls.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O scroll-research/Targets.swift scroll-research/Measure.swift scroll-research/Delegate.swift -o "$RUNNER_TEMP/measure-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/measure-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -Onone -emit-object scroll-research/Stock.swift -o "$RUNNER_TEMP/stock.o"
+          xcrun nm -ju "$RUNNER_TEMP/stock.o" > output/stock-imports.txt
+          xcrun swift-demangle --compact < output/stock-imports.txt > output/stock-demangled.txt
+          grep -F 'scrollTargetLayout' output/stock-demangled.txt
+          grep -F 'scrollTargetBehavior' output/stock-demangled.txt
+          grep -F 'scrollPosition' output/stock-demangled.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scroll-target-evidence
+          path: output/*.txt
+          if-no-files-found: warn
