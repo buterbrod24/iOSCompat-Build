@@ -1,0 +1,32 @@
+name: Swift Core private array contract research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-contracts/**'
+      - '.github/workflows/array-contracts.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 array-contracts/test_audit_contracts.py
+      - name: Compare original Swift release sources
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/swift57" "$RUNNER_TEMP/swift59" output
+          for f in Array.swift ContiguousArray.swift ArrayBuffer.swift ContiguousArrayBuffer.swift; do
+            curl -fsSL "https://raw.githubusercontent.com/swiftlang/swift/swift-5.7-RELEASE/stdlib/public/core/$f" -o "$RUNNER_TEMP/swift57/$f"
+            curl -fsSL "https://raw.githubusercontent.com/swiftlang/swift/ea95594ae137f288bf29a0b489b8689680a0086a/stdlib/public/core/$f" -o "$RUNNER_TEMP/swift59/$f"
+          done
+          python3 array-contracts/audit_contracts.py "$RUNNER_TEMP/swift57" "$RUNNER_TEMP/swift59" | tee output/array-contracts.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftcore-array-contract-evidence
+          path: output/*.txt
+          if-no-files-found: warn
