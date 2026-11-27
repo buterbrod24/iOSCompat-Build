@@ -1,0 +1,58 @@
+name: UIKit legacy menu action controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'uikit-action/**'
+      - '.github/workflows/uikit-action.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile legacy action adapter for iOS 16.2
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O uikit-action/Adapter.swift uikit-action/Measure.swift -o "$RUNNER_TEMP/action-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/action-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$RUNNER_TEMP/action-ios" > output/imports.txt
+          if grep -E 'selectedImage|UIMenuLeaf' output/imports.txt; then exit 1; fi
+      - name: Execute action descriptor and selection controls in simulator
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > "$RUNNER_TEMP/action-device.txt"
+          import json,os,re,pathlib
+          choices=[]
+          for runtime,items in json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"devices.json").read_text())["devices"].items():
+              m=re.search(r"\.iOS-(\d+)-(\d+)",runtime)
+              if not m or int(m.group(1))<17: continue
+              for item in items:
+                  if item.get("isAvailable") and item["name"].startswith("iPhone"): choices.append((int(m.group(1)),int(m.group(2)),item["udid"]))
+          if not choices: raise SystemExit("No iOS 17+ simulator")
+          print(max(choices)[2])
+          PY
+          device="$(cat "$RUNNER_TEMP/action-device.txt")"
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device" -b
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -target "$(uname -m)-apple-ios16.2-simulator" -sdk "$sdk" -swift-version 5 -parse-as-library uikit-action/Adapter.swift uikit-action/Measure.swift -o "$RUNNER_TEMP/action-sim"
+          xcrun simctl spawn "$device" "$RUNNER_TEMP/action-sim" | tee output/results.txt
+          grep -Fx 'TOTAL 12/12' output/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uikit-action-controls
+          path: output/*.txt
+          if-no-files-found: warn
+      - name: Shutdown simulator
+        if: always()
+        run: |
+          if test -s "$RUNNER_TEMP/action-device.txt"; then xcrun simctl shutdown "$(cat "$RUNNER_TEMP/action-device.txt")" || true; fi
