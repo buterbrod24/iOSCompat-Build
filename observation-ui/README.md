@@ -1,0 +1,5 @@
+# Observation legacy reactive bridge
+
+Original source-level adapter from the isolated Swift 5.9 Observation implementation to Combine ObservableObject/@Published. All observed model reads and writes must be MainActor-confined. The bridge defers reads until after willSet, coalesces synchronous mutations, rearms even when values compare equal, and invalidates queued callbacks on stop. It does not synchronously track every intermediate value. Existing one-shot registrations may remain until mutation; callbacks capture the bridge weakly. This is not a replacement for SwiftUI's native Observation environment or binary APIs. Host controls and iOS ARM64 compilation are separate from physical-device and real UI rendering tests. No code from Perception is incorporated.
+
+Research: https://github.com/pointfreeco/swift-perception (explicit tracking is required on legacy SwiftUI); https://developer.apple.com/documentation/SwiftUI/Migrating-from-the-observable-object-protocol-to-the-observable-macro (native integration begins in iOS 17).
