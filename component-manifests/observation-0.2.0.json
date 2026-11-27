@@ -23,5 +23,16 @@
     "independent_client_tests": "10/10",
     "runtime_export_lookups": "9/9",
     "scope": "Tested original Probe 0.2.0 client; no arbitrary app compatibility claim."
-  }
+  },
+  "required_symbols": [
+    "$s11Observation04withA8Tracking_8onChangexxyXE_yyYbcyXKtlF",
+    "$s11Observation0A9RegistrarV12withMutation2of7keyPath_q0_x_s03KeyG0Cyxq_Gq0_yKXEtKAA10ObservableRzr1_lF",
+    "$s11Observation0A9RegistrarV6access_7keyPathyx_s03KeyE0Cyxq_GtAA10ObservableRzr0_lF",
+    "$s11Observation0A9RegistrarV6didSet_7keyPathyx_s03KeyF0Cyxq_GtAA10ObservableRzr0_lF",
+    "$s11Observation0A9RegistrarV7willSet_7keyPathyx_s03KeyF0Cyxq_GtAA10ObservableRzr0_lF",
+    "$s11Observation0A9RegistrarVACycfC",
+    "$s11Observation0A9RegistrarVMa",
+    "$s11Observation0A9RegistrarVMn",
+    "$s11Observation10ObservableMp"
+  ]
 }

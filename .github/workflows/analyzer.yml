@@ -11,6 +11,9 @@ on:
       - 'scripts/test_import_summary.py'
       - 'scripts/report_to_inventory.py'
       - 'scripts/test_report_to_inventory.py'
+      - 'component-manifests/**'
+      - 'scripts/verify_observation.py'
+      - 'scripts/test_verify_observation.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -23,3 +26,5 @@ jobs:
       - run: python3 scripts/test_analyze_ipa.py
       - run: python3 scripts/test_import_summary.py
       - run: python3 scripts/test_report_to_inventory.py
+
+      - run: python3 scripts/test_verify_observation.py
