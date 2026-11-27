@@ -1,4 +1,7 @@
 import Foundation
+#if SEPARATE_MODULE
+import SwiftCoreMutationCompat
+#endif
 
 private final class Token {}
 private final class WeakSlot {

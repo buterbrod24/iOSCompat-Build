@@ -1,0 +1,57 @@
+name: Swift reference array independent library controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-compat/Mutation*.swift'
+      - '.github/workflows/array-mutation-library.yml'
+permissions:
+  contents: read
+jobs:
+  library:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Independently link and execute typed client
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          for mode in Onone O; do
+            dir="$RUNNER_TEMP/independent-$mode"
+            mkdir -p "$dir"
+            xcrun swiftc -swift-version 5 "-$mode" -parse-as-library -module-name SwiftCoreMutationCompat -emit-library -emit-module -emit-module-path "$dir/SwiftCoreMutationCompat.swiftmodule" array-compat/MutationCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftCoreMutationCompat.dylib -o "$dir/libSwiftCoreMutationCompat.dylib"
+            xcrun swiftc -swift-version 5 "-$mode" -parse-as-library -D SEPARATE_MODULE -I "$dir" -L "$dir" -lSwiftCoreMutationCompat -Xlinker -rpath -Xlinker "$dir" array-compat/MutationMeasure.swift -o "$dir/client"
+            xcrun nm -um "$dir/client" | tee "output/$mode-client-imports.txt"
+            grep -F 'ioscompatAppendReference' "output/$mode-client-imports.txt"
+            grep -F 'ioscompatPrepareAndAppend' "output/$mode-client-imports.txt"
+            "$dir/client" | tee "output/$mode.txt"
+            grep -Fx 'TOTAL 6/6' "output/$mode.txt"
+          done
+          diff -u output/Onone.txt output/O.txt
+      - name: Build independent ARM64 iOS 16.2 library and client
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          dir="$RUNNER_TEMP/ios-mutation"
+          mkdir -p "$dir"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name SwiftCoreMutationCompat -emit-library -emit-module -emit-module-path "$dir/SwiftCoreMutationCompat.swiftmodule" array-compat/MutationCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftCoreMutationCompat.dylib -o "$dir/libSwiftCoreMutationCompat.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -D SEPARATE_MODULE -I "$dir" -L "$dir" -lSwiftCoreMutationCompat -Xlinker -rpath -Xlinker @loader_path array-compat/MutationMeasure.swift -o "$dir/client"
+          for file in libSwiftCoreMutationCompat.dylib client; do
+            xcrun vtool -show-build "$dir/$file" | tee "output/$file-build.txt"
+            grep -Eq 'minos[[:space:]]+16\.2$' "output/$file-build.txt"
+            xcrun nm -um "$dir/$file" | tee "output/$file-imports.txt"
+            if grep -F 'Ts5' "output/$file-imports.txt"; then exit 1; fi
+            codesign --force --sign - "$dir/$file"
+            codesign --verify --strict "$dir/$file"
+          done
+          grep -F 'ioscompatAppendReference' output/client-imports.txt
+          grep -F 'ioscompatPrepareAndAppend' output/client-imports.txt
+          cp "$dir/libSwiftCoreMutationCompat.dylib" output/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: array-mutation-independent-library
+          path: output/
+          if-no-files-found: warn
