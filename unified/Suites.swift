@@ -147,6 +147,18 @@ func require(_ ok: Bool, _ why: String) throws {
             try require(rows.count == 12 && rows.allSatisfy { $0.1 }, detail)
             return "12/12 textual lookup subchecks\n" + detail
         })
+        tests.append(.init(name:"Metadata / independent witness module") {
+            let rows = UnifiedWitnessChecks.run()
+            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
+            try require(rows.count == 8 && rows.allSatisfy { $0.1 }, detail)
+            return "8/8 independent witness subchecks\n" + detail
+        })
+        tests.append(.init(name:"Metadata / independent opaque module") {
+            let rows = UnifiedOpaqueChecks.run()
+            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
+            try require(rows.count == 10 && rows.allSatisfy { $0.1 }, detail)
+            return "10/10 independent opaque subchecks\n" + detail
+        })
         return tests
     }
 
