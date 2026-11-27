@@ -87,6 +87,17 @@ jobs:
           grep -Eq 'minos[[:space:]]+16\.2$' "$out/build.txt"
           xcrun otool -L "$app/UnifiedProbe" | tee "$out/dependencies.txt"
           if grep -E "lib(WitnessFixture|OpaqueFixture|SwiftCoreMutationCompat|Unified_)" "$out/dependencies.txt"; then exit 1; fi
+          mkdir -p "$out/audit"
+          for file in "$app/UnifiedProbe" "$app"/Frameworks/*.dylib; do
+            name="$(basename "$file")"
+            xcrun lipo -archs "$file" > "$out/audit/$name.arch.txt"
+            xcrun nm -um "$file" > "$out/audit/$name.imports.txt"
+            xcrun otool -L "$file" > "$out/audit/$name.dependencies.txt"
+            xcrun vtool -show-build "$file" > "$out/audit/$name.build.txt"
+            test "$(cat "$out/audit/$name.arch.txt")" = arm64
+          done
+          python3 -m unittest discover -s unified -p test_audit_imports.py
+          python3 unified/audit_imports.py "$out/audit"
           codesign --force --sign - "$app"
           codesign --verify --deep --strict "$app"
           (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.7.0.ipa" Payload)
@@ -96,3 +107,9 @@ jobs:
           name: unified-device-probe
           path: output-unified/iOSCompat-UnifiedProbe-0.7.0.ipa
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-mach-o-audit
+          path: output-unified/audit/
+          if-no-files-found: warn
