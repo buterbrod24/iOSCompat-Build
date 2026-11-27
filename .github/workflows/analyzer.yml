@@ -38,6 +38,8 @@ on:
       - 'scripts/test_swift_protocol_inventory.py'
       - 'scripts/swift_generic_context.py'
       - 'scripts/test_swift_generic_context.py'
+      - 'scripts/metadata_request_model.py'
+      - 'scripts/test_metadata_request_model.py'
       - 'scripts/swift_descriptor_inventory.py'
       - 'scripts/test_swift_descriptor_inventory.py'
       - 'scripts/swift_typeref_inventory.py'
@@ -91,3 +93,5 @@ jobs:
       - run: python3 scripts/test_swift_generic_context.py
 
       - run: python3 scripts/test_swift_witness_control.py
+
+      - run: python3 scripts/test_metadata_request_model.py

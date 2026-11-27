@@ -57,6 +57,7 @@ def inspect(data):
     versions=Counter()
     generic=0
     unique=0
+    layout_string_flags=0
     seen=set()
     generic_values=[]
     generic_classes=0
@@ -97,6 +98,8 @@ def inspect(data):
         versions[str(version)]+=1
         generic+=bool(word&128)
         unique+=bool(word&64)
+        # Swift 5.9 kind-specific bit 4: layout-string presence declaration.
+        layout_string_flags+=bool(word&(1<<20))
         if word&128:
             if kind==16:
                 generic_classes+=1
@@ -115,6 +118,7 @@ def inspect(data):
             "records":length//4,"record_status":dict(sorted(status.items())),
             "nominal_kinds":dict(sorted(kinds.items())),"versions":dict(sorted(versions.items())),
             "generic_headers":generic,"unique_flag_headers":unique,
+            "layout_string_flag_headers":layout_string_flags,
             "generic_value_contexts":{"observed":len(contexts),"skipped_budget":generic-generic_classes-len(contexts),
               "classes_not_parsed":generic_classes,"status_counts":dict(sorted(context_status.items())),
               "nonzero_legacy_extra_field":sum(x.get("nonzero_legacy_extra_field",False) for x in contexts),

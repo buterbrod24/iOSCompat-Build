@@ -37,4 +37,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(inspect(fixture(truncate=True))["record_status"],{"truncated_nominal_prefix":1})
     def test_bad_segment(self):
         with self.assertRaises(ValueError): inspect(fixture()[:-1])
+    def test_layout_string_flag(self):
+        self.assertEqual(inspect(fixture(flags=17|(1<<20)))["layout_string_flag_headers"],1)
+        self.assertEqual(inspect(fixture(flags=17))["layout_string_flag_headers"],0)
 if __name__=="__main__": unittest.main()
