@@ -1,0 +1,38 @@
+name: Value witness public ownership and compiler evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'value-witness-research/**'
+      - '.github/workflows/value-witness-research.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          for opt in Onone O; do
+            xcrun swiftc -swift-version 5 -parse-as-library "-$opt" value-witness-research/Fixture.swift value-witness-research/Measure.swift -o "$RUNNER_TEMP/measure-$opt"
+            "$RUNNER_TEMP/measure-$opt" | tee "output/host-$opt.txt"
+            grep -Fx 'TOTAL 12/12' "output/host-$opt.txt"
+          done
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          for version in 16.2 17.0; do
+            xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$version" -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ValueFixture -O -emit-library value-witness-research/Fixture.swift -o "$RUNNER_TEMP/value-$version.dylib"
+            xcrun nm -um "$RUNNER_TEMP/value-$version.dylib" > "output/imports-$version.txt"
+            xcrun vtool -show-build "$RUNNER_TEMP/value-$version.dylib" > "output/build-$version.txt"
+            python3 scripts/swift_descriptor_inventory.py "$RUNNER_TEMP/value-$version.dylib" > "output/descriptors-$version.json"
+          done
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O value-witness-research/Fixture.swift value-witness-research/Measure.swift -o "$RUNNER_TEMP/measure-ios"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: value-witness-evidence
+          path: output/
+          if-no-files-found: warn
