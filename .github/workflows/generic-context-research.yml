@@ -1,0 +1,41 @@
+name: Swift generic context header and parameter pack evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'generic-context-research/**'
+      - 'scripts/swift_descriptor_inventory.py'
+      - 'scripts/swift_generic_context.py'
+      - '.github/workflows/generic-context-research.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p output
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name GenericFixture -Onone -emit-library generic-context-research/Legacy.swift -o "$RUNNER_TEMP/legacy.dylib"
+          python3 scripts/swift_descriptor_inventory.py "$RUNNER_TEMP/legacy.dylib" | tee output/legacy.json
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name PackFixture -Onone -emit-library generic-context-research/Modern.swift -o "$RUNNER_TEMP/modern.dylib"
+          python3 scripts/swift_descriptor_inventory.py "$RUNNER_TEMP/modern.dylib" | tee output/modern.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open("output/legacy.json"))["generic_value_contexts"]
+          b=json.load(open("output/modern.json"))["generic_value_contexts"]
+          assert a["status_counts"]=={"fixed_arrays_observed":2},a
+          assert a["nonzero_legacy_extra_field"]==0,a
+          assert b["type_pack_flag"]>=1,b
+          assert b["status_counts"].get("fixed_arrays_observed",0)>=1,b
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-generic-context-evidence
+          path: output/*.json
+          if-no-files-found: warn

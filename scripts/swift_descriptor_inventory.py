@@ -3,6 +3,7 @@
 import argparse,json,struct
 from collections import Counter
 from pathlib import Path
+from swift_generic_context import inspect_generic
 
 KINDS={16:"class",17:"struct",18:"enum"}
 MAX_IMAGE=256*1024*1024
@@ -57,6 +58,9 @@ def inspect(data):
     generic=0
     unique=0
     seen=set()
+    generic_values=[]
+    generic_classes=0
+    generic_budget=10000
     for i in range(0,length,4):
         raw=struct.unpack_from("<i",data,start+i)[0]
         tag=raw&3
@@ -93,11 +97,30 @@ def inspect(data):
         versions[str(version)]+=1
         generic+=bool(word&128)
         unique+=bool(word&64)
+        if word&128:
+            if kind==16:
+                generic_classes+=1
+            elif len(generic_values)<generic_budget:
+                generic_values.append(pos)
+    # Bound arrays to readonly file-backed text and the next observed nominal
+    # descriptor or table start. This is not a proof of descriptor extent.
+    from bisect import bisect_right
+    bounds=sorted({fo+t-vm for t in seen}|{start,fo+fs})
+    contexts=[]
+    for pos in generic_values:
+        end_pos=bounds[bisect_right(bounds,pos)]
+        contexts.append(inspect_generic(data,pos,end_pos))
+    context_status=Counter(x["status"] for x in contexts)
     return {"status":"inspected","architecture_subtype":sub&0xffffff,
             "records":length//4,"record_status":dict(sorted(status.items())),
             "nominal_kinds":dict(sorted(kinds.items())),"versions":dict(sorted(versions.items())),
             "generic_headers":generic,"unique_flag_headers":unique,
-            "scope":"Direct relative file-offset headers in read-only __TEXT only. No indirect reference resolution, parent traversal, metadata access calls, authentication or layout validation."}
+            "generic_value_contexts":{"observed":len(contexts),"skipped_budget":generic-generic_classes-len(contexts),
+              "classes_not_parsed":generic_classes,"status_counts":dict(sorted(context_status.items())),
+              "nonzero_legacy_extra_field":sum(x.get("nonzero_legacy_extra_field",False) for x in contexts),
+              "type_pack_flag":sum(x.get("type_pack_flag",False) for x in contexts),
+              "details":contexts},
+            "scope":"Direct relative file-offset headers in read-only __TEXT only. Generic value-type fixed arrays bounded by observed neighbors; not validated full descriptor extents. No indirect reference resolution, parent traversal, metadata access calls, authentication or layout validation."}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
