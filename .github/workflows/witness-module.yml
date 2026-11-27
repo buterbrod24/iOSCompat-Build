@@ -1,0 +1,45 @@
+name: Independent Swift witness module controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'metadata-compat/Witness*.swift'
+      - '.github/workflows/witness-module.yml'
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          for opt in Onone O; do
+            dir="$RUNNER_TEMP/witness-$opt"
+            mkdir -p "$dir"
+            xcrun swiftc -swift-version 5 "-$opt" -parse-as-library -enable-library-evolution -module-name WitnessFixture -emit-library -emit-module -emit-module-path "$dir/WitnessFixture.swiftmodule" metadata-compat/WitnessFixture.swift -Xlinker -install_name -Xlinker @rpath/libWitnessFixture.dylib -o "$dir/libWitnessFixture.dylib"
+            xcrun swiftc -swift-version 5 "-$opt" -parse-as-library -I "$dir" -L "$dir" -lWitnessFixture -Xlinker -rpath -Xlinker "$dir" metadata-compat/WitnessMeasure.swift -o "$dir/client"
+            "$dir/client" | tee "output/$opt.txt"
+            grep -Fx 'TOTAL 8/8' "output/$opt.txt"
+          done
+          diff -u output/Onone.txt output/O.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          dir="$RUNNER_TEMP/witness-ios"
+          mkdir -p "$dir"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -enable-library-evolution -module-name WitnessFixture -emit-library -emit-module -emit-module-path "$dir/WitnessFixture.swiftmodule" metadata-compat/WitnessFixture.swift -Xlinker -install_name -Xlinker @rpath/libWitnessFixture.dylib -o "$dir/libWitnessFixture.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -I "$dir" -L "$dir" -lWitnessFixture -Xlinker -rpath -Xlinker @loader_path metadata-compat/WitnessMeasure.swift -o "$dir/client"
+          for file in libWitnessFixture.dylib client; do
+            xcrun vtool -show-build "$dir/$file" | tee "output/$file-build.txt"
+            grep -Eq 'minos[[:space:]]+16\.2$' "output/$file-build.txt"
+            xcrun nm -um "$dir/$file" > "output/$file-imports.txt"
+            if grep -E 'swift_(conformsToProtocol2|getOpaqueTypeMetadata2|getOpaqueTypeConformance2|getTypeByMangledNameInContext2|getTypeByMangledNameInContextInMetadataState2)([[:space:]]|$)' "output/$file-imports.txt"; then exit 1; fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: witness-module-evidence
+          path: output/
+          if-no-files-found: warn
