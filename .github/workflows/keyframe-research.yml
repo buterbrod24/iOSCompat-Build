@@ -1,0 +1,35 @@
+name: Keyframe scalar and timeline research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'keyframe-research/**'
+      - '.github/workflows/keyframe-research.yml'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -swift-version 5 -parse-as-library -O keyframe-research/Timeline.swift keyframe-research/Measure.swift -o "$RUNNER_TEMP/measure"
+          "$RUNNER_TEMP/measure" | tee output/controls.txt
+          grep -Fx 'TOTAL 12/12' output/controls.txt
+          xcrun swiftc -swift-version 5 -parse-as-library -O keyframe-research/Timeline.swift keyframe-research/Stock.swift -o "$RUNNER_TEMP/stock"
+          "$RUNNER_TEMP/stock" | tee output/native.txt
+          grep -Fx 'NATIVE LINEAR MATCH 9/9' output/native.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O keyframe-research/Timeline.swift keyframe-research/Measure.swift -o "$RUNNER_TEMP/measure-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/measure-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: keyframe-timeline-evidence
+          path: output/*.txt
+          if-no-files-found: warn
