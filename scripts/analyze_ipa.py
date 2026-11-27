@@ -5,6 +5,7 @@ from import_summary import summarize
 from backdeploy_markers import inspect_markers, annotate_imports
 from deployment_metadata import inspect_deployment
 from export_trie import inspect_exports, summarize_exports
+from legacy_bind import inspect_legacy
 from macho_imports import read_imports, read_dependencies, declared_provider
 
 def validate_inventory(inventory, target):
@@ -33,9 +34,9 @@ def export_evidence(inventory, provider, symbol):
 def scan(path, catalog, inventory=None):
     if inventory is not None:
         validate_inventory(inventory, catalog["target"])
-    result = {"schema": 9, "target": catalog["target"], "images": [], "limitations": [
+    result = {"schema": 10, "target": catalog["target"], "images": [], "limitations": [
         "Local path candidates only; no inherited runpath stack, executable context or dyld cache export inventory",
-        "Fat binaries and classical bind streams are not fully decoded",
+        "Fat binaries, threaded binding, and weak coalescing streams are not fully decoded",
         "Candidate evidence is not proof of compatibility with this image",
         "Back-deployment markers are syntactic nlist name evidence only; stripped and inlined code may be invisible"]}
     with zipfile.ZipFile(path) as archive:
@@ -59,6 +60,10 @@ def scan(path, catalog, inventory=None):
                 try:
                     data = magic + f.read()
                     rows, sources, complete = read_imports(data)
+                    legacy_rows, legacy_status = inspect_legacy(data)
+                    rows = sorted(set(rows) | set(legacy_rows))
+                    sources += sorted({r[3] for r in legacy_rows})
+                    image['legacy_streams'] = legacy_status
                     deps, rpaths = read_dependencies(data)
                     cpu, subtype = struct.unpack_from('<II', data, 4)
                     image.update(sources=sources, complete=complete, imports=[], dependencies=deps, rpaths=rpaths, cpu_type=cpu, cpu_subtype=subtype)

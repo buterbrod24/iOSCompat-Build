@@ -30,6 +30,8 @@ on:
       - 'scripts/test_cache_exports.py'
       - 'scripts/cache_compare.py'
       - 'scripts/test_cache_compare.py'
+      - 'scripts/legacy_bind.py'
+      - 'scripts/test_legacy_bind.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -60,3 +62,5 @@ jobs:
       - run: python3 scripts/test_cache_exports.py
 
       - run: python3 scripts/test_cache_compare.py
+
+      - run: python3 scripts/test_legacy_bind.py
