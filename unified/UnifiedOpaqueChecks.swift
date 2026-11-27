@@ -25,3 +25,12 @@ enum UnifiedOpaqueChecks {
         return rows
     }
 }
+
+@_cdecl("ioscompat_unified_opaque_mask")
+public func ioscompat_unified_opaque_mask() -> Int32 {
+    let rows = UnifiedOpaqueChecks.run()
+    guard rows.count == 10 else { return -1 }
+    return rows.enumerated().reduce(Int32(0)) { mask, row in
+        mask | (row.element.1 ? (Int32(1) << row.offset) : 0)
+    }
+}

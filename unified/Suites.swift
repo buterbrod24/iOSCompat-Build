@@ -148,22 +148,13 @@ func require(_ ok: Bool, _ why: String) throws {
             return "12/12 textual lookup subchecks\n" + detail
         })
         tests.append(.init(name:"Metadata / independent witness module") {
-            let rows = UnifiedWitnessChecks.run()
-            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
-            try require(rows.count == 8 && rows.allSatisfy { $0.1 }, detail)
-            return "8/8 independent witness subchecks\n" + detail
+            try self.runMetadataClient("witness", names: ["generic array", "generic string", "empty collection", "cross-module positive cast", "cross-module negative cast", "heterogeneous existential dispatch", "client-side positive conformance", "client-side negative conformance"])
         })
         tests.append(.init(name:"Metadata / independent opaque module") {
-            let rows = UnifiedOpaqueChecks.run()
-            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
-            try require(rows.count == 10 && rows.allSatisfy { $0.1 }, detail)
-            return "10/10 independent opaque subchecks\n" + detail
+            try self.runMetadataClient("opaque", names: ["same declaration and specialization", "different specialization", "different underlying nominal type", "nested opaque value preserves concrete runtime type", "associated item through generic call", "associated string through generic call", "integer opaque equality", "integer opaque inequality", "string opaque equality", "different concrete opaque types"])
         })
         tests.append(.init(name:"Swift Core / independent mutation adapter") {
-            let rows = UnifiedMutationChecks.run()
-            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
-            try require(rows.count == 6 && rows.allSatisfy { $0.1 }, detail)
-            return "6/6 typed mutation subchecks; no private ABI alias\n" + detail
+            try self.runMetadataClient("mutation", names: ["capacity", "order", "COW", "growth", "retention", "release"])
         })
         tests.append(.init(name:"Metadata / contextual generic controls") {
             let rows = UnifiedContextChecks.run()
@@ -172,6 +163,21 @@ func require(_ ok: Bool, _ why: String) throws {
             return "6/6 source-level contextual generic subchecks\n" + detail
         })
         return tests
+    }
+
+    private func runMetadataClient(_ key: String, names: [String]) throws -> String {
+        let handle = try batchHandle("libUnified_" + key + "_Client.dylib")
+        guard let entry = dlsym(handle, "ioscompat_unified_" + key + "_mask") else {
+            throw ProbeFailure.failed("Missing diagnostic client entry")
+        }
+        typealias Test = @convention(c) () -> Int32
+        let mask = unsafeBitCast(entry, to: Test.self)()
+        try require(mask >= 0, "Invalid client result")
+        let detail = names.enumerated().map { index, name in
+            "\(mask & (Int32(1) << index) != 0 ? "PASS" : "FAIL") \(name)"
+        }.joined(separator:"\n")
+        try require(mask == (Int32(1) << names.count) - 1, detail)
+        return "\(names.count)/\(names.count) diagnostic subchecks; no new runtime ABI claim\n" + detail
     }
 
     private var batchHandles: [String: UnsafeMutableRawPointer] = [:]

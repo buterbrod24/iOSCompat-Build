@@ -68,14 +68,25 @@ jobs:
           lib="$app/Frameworks/libSwiftCoreMutationCompat.dylib"
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name SwiftCoreMutationCompat -emit-library -emit-module -emit-module-path "$modules/SwiftCoreMutationCompat.swiftmodule" array-compat/MutationCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftCoreMutationCompat.dylib -o "$lib"
           codesign --force --sign - "$lib"
-          test "$(find "$app/Frameworks" -name '*.dylib' | wc -l | tr -d ' ')" = 12
+          client="$app/Frameworks/libUnified_witness_Client.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name Unified_witness_Client -emit-library -I "$modules" -L "$app/Frameworks" -lWitnessFixture -Xlinker -rpath -Xlinker @loader_path unified/UnifiedWitnessChecks.swift -o "$client"
+          codesign --force --sign - "$client"
+          client="$app/Frameworks/libUnified_opaque_Client.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name Unified_opaque_Client -emit-library -I "$modules" -L "$app/Frameworks" -lOpaqueFixture -Xlinker -rpath -Xlinker @loader_path unified/UnifiedOpaqueChecks.swift -o "$client"
+          codesign --force --sign - "$client"
+          client="$app/Frameworks/libUnified_mutation_Client.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name Unified_mutation_Client -emit-library -I "$modules" -L "$app/Frameworks" -lSwiftCoreMutationCompat -Xlinker -rpath -Xlinker @loader_path unified/UnifiedMutationChecks.swift -o "$client"
+          codesign --force --sign - "$client"
+          test "$(find "$app/Frameworks" -name '*.dylib' | wc -l | tr -d ' ')" = 15
           for lib in "$app"/Frameworks/*.dylib; do
             xcrun vtool -show-build "$lib" | grep -Eq 'minos[[:space:]]+16\.2$'
           done
           cp unified/Info.plist "$app/Info.plist"
-          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift research/LegacyChange.swift probe-v3-prep/ReserveProbe.swift activity-protocol/Candidate.swift executor-research/Checks.swift metadata-compat/Candidate.swift metadata-compat/MangledLookup.swift unified/RegistryChecks.swift unified/MangledChecks.swift unified/UnifiedWitnessChecks.swift unified/UnifiedOpaqueChecks.swift unified/UnifiedMutationChecks.swift unified/UnifiedContextChecks.swift metadata-compat/ContextFixture.swift -I "$modules" -L "$app/Frameworks" -lWitnessFixture -lOpaqueFixture -lSwiftCoreMutationCompat -Xlinker -rpath -Xlinker @executable_path/Frameworks -o "$app/UnifiedProbe"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O unified/Loader.swift unified/Suites.swift unified/Measure.swift research/LegacyChange.swift probe-v3-prep/ReserveProbe.swift activity-protocol/Candidate.swift executor-research/Checks.swift metadata-compat/Candidate.swift metadata-compat/MangledLookup.swift unified/RegistryChecks.swift unified/MangledChecks.swift unified/UnifiedContextChecks.swift metadata-compat/ContextFixture.swift -o "$app/UnifiedProbe"
           xcrun vtool -show-build "$app/UnifiedProbe" | tee "$out/build.txt"
           grep -Eq 'minos[[:space:]]+16\.2$' "$out/build.txt"
+          xcrun otool -L "$app/UnifiedProbe" | tee "$out/dependencies.txt"
+          if grep -E "lib(WitnessFixture|OpaqueFixture|SwiftCoreMutationCompat|Unified_)" "$out/dependencies.txt"; then exit 1; fi
           codesign --force --sign - "$app"
           codesign --verify --deep --strict "$app"
           (cd build/unified && zip -qry "$out/iOSCompat-UnifiedProbe-0.7.0.ipa" Payload)
