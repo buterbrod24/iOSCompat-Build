@@ -9,6 +9,37 @@ BLOCKS = {
     "SwiftUI / protocol export evidence": "/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
 }
 
+# Exact query allowlist taken from Unified Probe 0.6.0 Suites.swift.
+EXPECTED = dict(zip(BLOCKS, [
+    [
+        "swift_conformsToProtocol",
+        "swift_conformsToProtocol2",
+        "swift_getOpaqueTypeMetadata",
+        "swift_getOpaqueTypeMetadata2",
+        "swift_getOpaqueTypeConformance",
+        "swift_getOpaqueTypeConformance2",
+        "swift_getTypeByMangledNameInContext",
+        "swift_getTypeByMangledNameInContext2",
+        "swift_getTypeByMangledNameInContextInMetadataState",
+        "swift_getTypeByMangledNameInContextInMetadataState2"
+    ],
+    [
+        "$sScF7enqueueyys11ExecutorJobVnFTq",
+        "$sScF7enqueueyys3JobVnFTq",
+        "$sScf7enqueueyys11ExecutorJobVnFTq",
+        "$sScf7enqueueyys3JobVnFTq",
+        "$sScS10makeStream2of15bufferingPolicyScSyxG6stream_ScS12ContinuationVyx_G12continuationtxm_AG09BufferingE0Oyx__GtFZ"
+    ],
+    [
+        "$s7SwiftUI4ViewMp",
+        "$s7SwiftUI10ShapeStyleMp",
+        "$s7SwiftUI6LayoutMp",
+        "$s7SwiftUI10ShapeStyleP7resolve2in8ResolvedQzAA17EnvironmentValuesV_tFTq",
+        "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
+        "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq"
+    ]
+]))
+
 def convert(text):
     lines = text.splitlines()
     if lines[:2] != ["iOSCompat Unified Probe 0.6.0", "OS: 16.2"]:
@@ -36,11 +67,11 @@ def convert(text):
                 if symbol in symbols:
                     raise ValueError("duplicate observation")
                 symbols[symbol] = state.lower()
-    counts = {BLOCKS[k]: n for k,n in zip(BLOCKS,(10,5,6))}
-    if set(providers) != set(counts) or any(len(providers[p]["symbols"]) != n for p,n in counts.items()):
+    expected = {BLOCKS[k]:set(names) for k,names in EXPECTED.items()}
+    if set(providers) != set(expected) or any(set(providers[p]["symbols"]) != names for p,names in expected.items()):
         raise ValueError("unexpected observation coverage")
     inventory = {"schema":1,"target":"16.2","build":"20C65","architecture":"arm64",
-                 "method":"Unified Probe 0.6.0 provider-scoped dlsym; architecture from probe build target",
+                 "method":"Unified Probe 0.6.0 dlsym using named dlopen handle without RTLD_FIRST; dependency lookup possible; architecture from probe build target",
                  "providers":providers}
     validate_inventory(inventory,"16.2")
     return inventory
