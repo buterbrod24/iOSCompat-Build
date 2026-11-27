@@ -1,0 +1,38 @@
+name: Mach-O real reexport fixtures
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'reexport-fixtures/**'
+      - 'scripts/export_trie.py'
+      - 'scripts/reexport_graph.py'
+      - 'scripts/macho_imports.py'
+      - '.github/workflows/reexport-fixtures.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build original ARM64 iOS fixture libraries and compare exports
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/reexports" output
+          dir="$RUNNER_TEMP/reexports"
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios16.2 -isysroot "$sdk" -dynamiclib reexport-fixtures/Leaf.c -install_name @rpath/libLeaf.dylib -o "$dir/libLeaf.dylib"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios16.2 -isysroot "$sdk" -dynamiclib reexport-fixtures/Facade.c -install_name @rpath/libFacade.dylib -Wl,-reexport_library,"$dir/libLeaf.dylib" -o "$dir/libFacade.dylib"
+          xcrun otool -L "$dir/libFacade.dylib" | tee output/dependencies.txt
+          xcrun dyld_info -exports "$dir/libLeaf.dylib" | tee output/leaf-exports.txt
+          xcrun dyld_info -exports "$dir/libFacade.dylib" | tee output/facade-exports.txt
+          python3 reexport-fixtures/verify.py "$dir" | tee output/results.txt
+          grep -Fx 'TOTAL 5/5' output/results.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-reexport-evidence
+          path: output/*.txt
+          if-no-files-found: warn
