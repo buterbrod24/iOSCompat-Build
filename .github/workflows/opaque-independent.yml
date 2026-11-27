@@ -1,0 +1,60 @@
+name: Independent opaque metadata client
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'opaque-research/Fixture.swift'
+      - 'opaque-research/IndependentMeasure.swift'
+      - '.github/workflows/opaque-independent.yml'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          for opt in Onone O; do
+            dir="$RUNNER_TEMP/opaque-$opt"
+            mkdir -p "$dir"
+            xcrun swiftc -swift-version 5 "-$opt" -parse-as-library -enable-library-evolution -module-name OpaqueFixture -emit-library -emit-module -emit-module-path "$dir/OpaqueFixture.swiftmodule" opaque-research/Fixture.swift -Xlinker -install_name -Xlinker @rpath/libOpaqueFixture.dylib -o "$dir/libOpaqueFixture.dylib"
+            xcrun swiftc -swift-version 5 "-$opt" -parse-as-library -I "$dir" -L "$dir" -lOpaqueFixture -Xlinker -rpath -Xlinker "$dir" opaque-research/IndependentMeasure.swift -o "$dir/client"
+            "$dir/client" | tee "output/$opt.txt"
+            grep -Fx 'TOTAL 10/10' "output/$opt.txt"
+          done
+          diff -u output/Onone.txt output/O.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          for version in 16.2 17.0; do
+            dir="$RUNNER_TEMP/opaque-ios-$version"
+            mkdir -p "$dir"
+            xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$version" -sdk "$sdk" -swift-version 5 -Onone -parse-as-library -enable-library-evolution -module-name OpaqueFixture -emit-library -emit-module -emit-module-path "$dir/OpaqueFixture.swiftmodule" opaque-research/Fixture.swift -Xlinker -install_name -Xlinker @rpath/libOpaqueFixture.dylib -o "$dir/libOpaqueFixture.dylib"
+            xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$version" -sdk "$sdk" -swift-version 5 -Onone -parse-as-library -I "$dir" -L "$dir" -lOpaqueFixture -Xlinker -rpath -Xlinker @loader_path opaque-research/IndependentMeasure.swift -o "$dir/client"
+            for file in client libOpaqueFixture.dylib; do
+              xcrun nm -um "$dir/$file" > "output/$version-$file-imports.txt"
+              xcrun vtool -show-build "$dir/$file" > "output/$version-$file-build.txt"
+              grep -Eq "minos[[:space:]]+$version$" "output/$version-$file-build.txt"
+            done
+            xcrun otool -L "$dir/client" > "output/$version-dependencies.txt"
+            grep -F '@rpath/libOpaqueFixture.dylib' "output/$version-dependencies.txt"
+          done
+          python3 - <<'PY'
+          import json,re,pathlib
+          names = re.compile(r'\b_?swift_(?:getOpaqueTypeMetadata2?|getOpaqueTypeConformance2?|conformsToProtocol2?)\b')
+          report = {}
+          for version in ("16.2", "17.0"):
+              report[version] = {}
+              for file in ("client", "libOpaqueFixture.dylib"):
+                  text = pathlib.Path(f"output/{version}-{file}-imports.txt").read_text()
+                  report[version][file] = sorted(set(names.findall(text)))
+          pathlib.Path("output/runtime-comparison.json").write_text(json.dumps(report,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opaque-independent-evidence
+          path: output/
+          if-no-files-found: warn
