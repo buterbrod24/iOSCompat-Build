@@ -1,0 +1,38 @@
+name: Swift compiler stream back-deployment evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'stream-backdeploy/**'
+      - '.github/workflows/stream-backdeploy.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare stock client imports by target and optimization
+        run: |
+          set -euo pipefail
+          mkdir -p output "$RUNNER_TEMP/stream-backdeploy"
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun swiftc --version | tee output/toolchain.txt
+          for os in 16.2 17.0; do
+            for mode in Onone O; do
+              prefix="$RUNNER_TEMP/stream-backdeploy/$os-$mode"
+              xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$os" -sdk "$sdk" -swift-version 5 -parse-as-library "-$mode" -module-name StockBackDeploy -emit-object stream-backdeploy/Stock.swift -o "$prefix.o"
+              xcrun nm -ju "$prefix.o" > "$prefix.imports"
+              xcrun nm -um "$prefix.o" > "$prefix.details"
+              xcrun vtool -show-build "$prefix.o" | tee "output/$os-$mode-build.txt"
+            done
+          done
+          python3 stream-backdeploy/report.py "$RUNNER_TEMP/stream-backdeploy" | tee output/comparison.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stream-backdeploy-evidence
+          path: output/*.txt
+          if-no-files-found: warn
