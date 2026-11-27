@@ -1,0 +1,43 @@
+name: Scoped system export physical device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'system-export-device/**'
+      - '.github/workflows/system-export-device.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/system-export/Payload/SystemExportProbe.app"
+          mkdir -p "$app" output
+          cp unified/Info.plist "$app/Info.plist"
+          cp system-export-device/queries.json "$app/queries.json"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable SystemExportProbe' -c 'Set :CFBundleIdentifier net.ioscompat.systemexportprobe' -c 'Set :CFBundleName SystemExportProbe' -c 'Set :CFBundleDisplayName System Export Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O system-export-device/DeviceProbe.swift -o "$app/SystemExportProbe"
+          xcrun vtool -show-build "$app/SystemExportProbe" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$app/SystemExportProbe" > output/imports.txt
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/system-export && zip -qry "$GITHUB_WORKSPACE/output/iOSCompat-SystemExportProbe-0.1.0.ipa" Payload)
+          unzip -t output/iOSCompat-SystemExportProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: system-export-device-probe
+          path: output/iOSCompat-SystemExportProbe-0.1.0.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: system-export-device-evidence
+          path: output/*.txt
+          if-no-files-found: warn

@@ -1,0 +1,59 @@
+{
+  "/System/Library/Frameworks/SwiftUI.framework/SwiftUI": [
+    "$s7SwiftUI10ShapeStyleMp",
+    "$s7SwiftUI10ShapeStyleP7resolve2in8ResolvedQzAA17EnvironmentValuesV_tFTq",
+    "$s7SwiftUI19UIViewRepresentableP14_layoutOptionsyAA013_PlatformViewd6LayoutF0V0C4TypeQzFZTq",
+    "$s7SwiftUI20ToolbarItemPlacementV13topBarLeadingACvgZ",
+    "$s7SwiftUI20ToolbarItemPlacementV14topBarTrailingACvgZ",
+    "$s7SwiftUI29UIViewControllerRepresentableP14_layoutOptionsyAA013_PlatformViewe6LayoutG0V0cD4TypeQzFZTq",
+    "$s7SwiftUI4ViewMp",
+    "$s7SwiftUI6LayoutMp"
+  ],
+  "/usr/lib/swift/libswiftCore.dylib": [
+    "$sSa034_makeUniqueAndReserveCapacityIfNotB0yyFyXl_Ts5",
+    "$sSa16_createNewBuffer14bufferIsUnique15minimumCapacity13growForAppendySb_SiSbtFyXl_Ts5",
+    "$sSa37_appendElementAssumeUniqueAndCapacity_03newB0ySi_xntFyXl_Ts5",
+    "$ss12_ArrayBufferV13_copyContents12initializings16IndexingIteratorVyAByxGG_SitSryxG_tFyXl_Ts5",
+    "$ss12_ArrayBufferV19_getElementSlowPathyyXlSiFyXl_Ts5",
+    "$ss12_ArrayBufferV20_consumeAndCreateNew14bufferIsUnique15minimumCapacity13growForAppendAByxGSb_SiSbtFyXl_Ts5",
+    "$ss15ContiguousArrayV034_makeUniqueAndReserveCapacityIfNotD0yyFyXl_Ts5",
+    "$ss15ContiguousArrayV12_endMutationyyFyXl_Ts5",
+    "$ss15ContiguousArrayV15reserveCapacityyySiFyXl_Ts5",
+    "$ss15ContiguousArrayV20_reserveCapacityImpl07minimumD013growForAppendySi_SbtFyXl_Ts5",
+    "$ss15ContiguousArrayV36_reserveCapacityAssumingUniqueBuffer8oldCountySi_tFyXl_Ts5",
+    "$ss15ContiguousArrayV37_appendElementAssumeUniqueAndCapacity_03newD0ySi_xntFyXl_Ts5",
+    "$ss22_ContiguousArrayBufferV20_consumeAndCreateNew14bufferIsUnique15minimumCapacity13growForAppendAByxGSb_SiSbtFyXl_Ts5",
+    "swift_allocateGenericClassMetadataWithLayoutString",
+    "swift_allocateGenericValueMetadataWithLayoutString",
+    "swift_conformsToProtocol",
+    "swift_conformsToProtocol2",
+    "swift_generic_instantiateLayoutString",
+    "swift_getOpaqueTypeConformance",
+    "swift_getOpaqueTypeConformance2",
+    "swift_getOpaqueTypeMetadata",
+    "swift_getOpaqueTypeMetadata2",
+    "swift_getTypeByMangledNameInContext",
+    "swift_getTypeByMangledNameInContext2",
+    "swift_getTypeByMangledNameInContextInMetadataState",
+    "swift_getTypeByMangledNameInContextInMetadataState2",
+    "swift_initStructMetadataWithLayoutString"
+  ],
+  "/usr/lib/swift/libswiftObservation.dylib": [
+    "$s11Observation04withA8Tracking_8onChangexxyXE_yyYbcyXKtlF",
+    "$s11Observation0A9RegistrarV12withMutation2of7keyPath_q0_x_s03KeyG0Cyxq_Gq0_yKXEtKAA10ObservableRzr1_lF",
+    "$s11Observation0A9RegistrarV6access_7keyPathyx_s03KeyE0Cyxq_GtAA10ObservableRzr0_lF",
+    "$s11Observation0A9RegistrarV6didSet_7keyPathyx_s03KeyF0Cyxq_GtAA10ObservableRzr0_lF",
+    "$s11Observation0A9RegistrarV7willSet_7keyPathyx_s03KeyF0Cyxq_GtAA10ObservableRzr0_lF",
+    "$s11Observation0A9RegistrarVACycfC",
+    "$s11Observation0A9RegistrarVMa",
+    "$s11Observation0A9RegistrarVMn",
+    "$s11Observation10ObservableMp"
+  ],
+  "/usr/lib/swift/libswift_Concurrency.dylib": [
+    "$sScF7enqueueyys11ExecutorJobVnFTq",
+    "$sScF7enqueueyys3JobVnFTq",
+    "$sScS10makeStream2of15bufferingPolicyScSyxG6stream_ScS12ContinuationVyx_G12continuationtxm_AG09BufferingE0Oyx__GtFZ",
+    "$sScf7enqueueyys11ExecutorJobVnFTq",
+    "$sScf7enqueueyys3JobVnFTq"
+  ]
+}
