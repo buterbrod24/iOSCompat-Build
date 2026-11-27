@@ -159,6 +159,18 @@ func require(_ ok: Bool, _ why: String) throws {
             try require(rows.count == 10 && rows.allSatisfy { $0.1 }, detail)
             return "10/10 independent opaque subchecks\n" + detail
         })
+        tests.append(.init(name:"Swift Core / independent mutation adapter") {
+            let rows = UnifiedMutationChecks.run()
+            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
+            try require(rows.count == 6 && rows.allSatisfy { $0.1 }, detail)
+            return "6/6 typed mutation subchecks; no private ABI alias\n" + detail
+        })
+        tests.append(.init(name:"Metadata / contextual generic controls") {
+            let rows = UnifiedContextChecks.run()
+            let detail = rows.map { "\($0.1 ? "PASS" : "FAIL") \($0.0)" }.joined(separator:"\n")
+            try require(rows.count == 6 && rows.allSatisfy { $0.1 }, detail)
+            return "6/6 source-level contextual generic subchecks\n" + detail
+        })
         return tests
     }
 
