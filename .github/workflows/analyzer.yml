@@ -26,6 +26,8 @@ on:
       - 'scripts/test_cache_inventory.py'
       - 'scripts/cache_set.py'
       - 'scripts/test_cache_set.py'
+      - 'scripts/cache_exports.py'
+      - 'scripts/test_cache_exports.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -52,3 +54,5 @@ jobs:
       - run: python3 scripts/test_cache_inventory.py
 
       - run: python3 scripts/test_cache_set.py
+
+      - run: python3 scripts/test_cache_exports.py
