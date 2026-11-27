@@ -3,6 +3,8 @@
 import argparse,json,struct
 from collections import Counter
 from pathlib import Path
+from bisect import bisect_right
+from swift_witness_control import inspect_witness_control
 
 MAX_IMAGE=256*1024*1024
 MAX_RECORDS=500000
@@ -50,6 +52,16 @@ def inspect(data):
     intervals=sorted((a,a+l) for a,l,_ in tables.values() if l)
     if any(b>c for (_,b),(c,_) in zip(intervals,intervals[1:])):
         raise ValueError("overlapping tables")
+    # Neighboring record targets supply conservative bounds, not proven extents.
+    bounds={fo+fs}
+    for a,l,o in tables.values():
+        bounds.add(o)
+        for i in range(0,l,4):
+            raw=struct.unpack_from("<i",data,o+i)[0]
+            target=a+i+raw
+            if raw and not raw&3 and vm<=target<vm+fs:
+                bounds.add(fo+target-vm)
+    bounds=sorted(bounds)
     result={"status":"inspected","architecture_subtype":sub&0xffffff}
     for key in ("protocols","conformances"):
         if key not in tables:
@@ -60,6 +72,10 @@ def inspect(data):
         flags_count=Counter()
         requirement_counts=Counter()
         seen=set()
+        witness_states=Counter()
+        generic_controls=0
+        template_words=Counter()
+        resilient_records=0
         for i in range(0,length,4):
             raw=struct.unpack_from("<i",data,start+i)[0]
             # Protocol record uses a tagged relative context pointer. Only zero
@@ -92,13 +108,26 @@ def inspect(data):
                 flags_count["generic_witness_table"]+=bool(word&131072)
                 requirement_counts["conditional_requirements"]+=(word>>8)&255
                 requirement_counts["conditional_pack_descriptors"]+=(word>>24)&255
+                if word&(65536|131072):
+                    control=inspect_witness_control(data,pos,bounds[bisect_right(bounds,pos)],word)
+                    witness_states[control["status"]]+=1
+                    if control["status"]=="trailing_headers_observed":
+                        resilient_records+=control.get("resilient_witness_records",0)
+                        if "generic_witness_control" in control:
+                            generic_controls+=1
+                            template_words[str(control["generic_witness_control"]["template_words"])]+=1
             seen.add(target)
             states["fixed_header_observed"]+=1
         result[key]={"records":length//4,"record_status":dict(sorted(states.items())),
                      "type_reference_kinds":dict(sorted(kinds.items())),
                      "flags":dict(sorted(flags_count.items())),
                      "requirement_counts":dict(sorted(requirement_counts.items()))}
-    result["scope"]="Fixed headers only; counts are not validated trailing arrays. No pointer-field resolution, witness inspection, authentication or runtime conformance claim."
+        if key=="conformances":
+            result[key]["witness_controls"]={"status_counts":dict(sorted(witness_states.items())),
+                "generic_controls_observed":generic_controls,
+                "template_word_histogram":dict(sorted(template_words.items())),
+                "resilient_records_observed":resilient_records}
+    result["scope"]="Fixed headers and bounded witness control fields only; neighbor bounds are not proven extents. No witness entry resolution, pointer authentication or runtime conformance claim."
     return result
 
 def main():

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'protocol-header-research/**'
+      - 'scripts/swift_witness_control.py'
       - 'scripts/swift_protocol_inventory.py'
       - '.github/workflows/protocol-header-research.yml'
 permissions:
@@ -28,6 +29,7 @@ jobs:
           assert r["protocols"]["record_status"].get("fixed_header_observed")==1,r
           assert r["conformances"]["record_status"].get("fixed_header_observed")==2,r
           assert r["conformances"]["requirement_counts"]["conditional_requirements"]>=1,r
+          assert r["conformances"]["witness_controls"]["generic_controls_observed"]>=1,r
           PY
       - uses: actions/upload-artifact@v4
         if: always()
