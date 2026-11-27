@@ -90,8 +90,13 @@ final class CompatUnavailableView: UIView {
         actionButton.isEnabled = !actionButton.isHidden
     }
     @objc private func activate() {
-        guard !actionButton.isHidden,actionButton.isEnabled else { return }
-        action?()
+        _ = performConfiguredAction()
+    }
+    @discardableResult
+    func performConfiguredAction() -> Bool {
+        guard !actionButton.isHidden, actionButton.isEnabled, let action else { return false }
+        action()
+        return true
     }
 }
 

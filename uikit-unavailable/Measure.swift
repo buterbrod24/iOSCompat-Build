@@ -17,15 +17,15 @@ import Darwin
         rows.append(("loading reuses view",host.placeholder === view && parent.subviews.count==1 && view.indicator.isAnimating))
         rows.append(("loading clears prior message",view.messageLabel.isHidden && view.messageLabel.text==nil))
         var count=0
-        var retry=CompatUnavailableConfiguration.empty(title:"Offline",image:UIImage(systemName:"wifi.slash"))
+        var retry=CompatUnavailableConfiguration.empty(title:"Offline",image:UIImage())
         retry.actionTitle="Retry"
         retry.action={count+=1}
         host.update(retry)
-        view.actionButton.sendActions(for:.touchUpInside)
-        rows.append(("retry action and image",count==1 && !view.iconView.isHidden && !view.actionButton.isHidden && !view.indicator.isAnimating))
+        let triggered=view.performConfiguredAction()
+        rows.append(("configured retry action and image",triggered && count==1 && !view.iconView.isHidden && !view.actionButton.isHidden && !view.indicator.isAnimating))
         host.update(.empty(title:"Done"))
-        view.actionButton.sendActions(for:.touchUpInside)
-        rows.append(("old action cleared",count==1 && view.actionButton.isHidden && !view.actionButton.isEnabled))
+        let stale=view.performConfiguredAction()
+        rows.append(("old configured action cleared",!stale && count==1 && view.actionButton.isHidden && !view.actionButton.isEnabled))
         host.update(nil)
         rows.append(("removal detaches view",host.placeholder==nil && view.superview==nil && parent.subviews.isEmpty))
         host.update(.empty(title:"New"))
