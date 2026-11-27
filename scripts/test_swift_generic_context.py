@@ -1,5 +1,5 @@
 import struct,unittest
-from swift_generic_context import inspect_generic
+from swift_generic_context import inspect_generic,inspect_pack_shapes
 
 def fixture(params=b"\x80",reqs=(128,),keys=2,flags=0):
     data=bytearray(36)+struct.pack("<4H",len(params),len(reqs),keys,flags)+params
@@ -38,4 +38,26 @@ class Tests(unittest.TestCase):
         d=fixture(params=b"\x80\x80\x80",reqs=(1,31))
         r=inspect_generic(d,0,len(d))
         self.assertEqual(r["requirement_kinds"],{"layout":1,"same_type":1})
+    def test_shape_metadata_and_witness(self):
+        d=fixture(params=b"\x81",reqs=(0xa0,),keys=3,flags=1)
+        d+=struct.pack("<10H",2,1,0,1,0,0,1,2,0,0)
+        r=inspect_generic(d,0,len(d))["pack_shapes"]
+        self.assertEqual(r["status"],"shape_array_observed")
+        self.assertEqual(r["kinds"],{"metadata":1,"witness_table":1})
+    def test_pack_shape_truncated(self):
+        d=fixture(params=b"\x81",reqs=(),keys=2,flags=1)
+        self.assertEqual(inspect_generic(d,0,len(d))["pack_shapes"]["status"],"truncated_pack_header")
+    def test_pack_wrong_count(self):
+        d=struct.pack("<2H",0,0)
+        self.assertEqual(inspect_pack_shapes(d,0,len(d),2,1,0)["status"],"pack_count_mismatch")
+    def test_pack_bounds(self):
+        for index,shape in ((0,0),(2,0),(1,1)):
+            d=struct.pack("<6H",1,1,0,index,shape,0)
+            self.assertEqual(inspect_pack_shapes(d,0,len(d),2,1,0)["status"],"pack_index_or_shape_out_of_range")
+    def test_pack_order(self):
+        d=struct.pack("<10H",2,1,1,2,0,0,0,1,0,0)
+        self.assertEqual(inspect_pack_shapes(d,0,len(d),3,1,1)["status"],"unordered_or_duplicate_pack_index")
+    def test_missing_pack_flag(self):
+        d=fixture(params=b"\x81",reqs=(),keys=2,flags=0)
+        self.assertEqual(inspect_generic(d,0,len(d))["pack_shapes"]["status"],"pack_markers_without_header_flag")
 if __name__=="__main__":unittest.main()

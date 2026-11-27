@@ -30,8 +30,12 @@ jobs:
           b=json.load(open("output/modern.json"))["generic_value_contexts"]
           assert a["status_counts"]=={"fixed_arrays_observed":2},a
           assert a["nonzero_legacy_extra_field"]==0,a
-          assert b["type_pack_flag"]>=1,b
-          assert b["status_counts"].get("fixed_arrays_observed",0)>=1,b
+          assert b["type_pack_flag"]==2,b
+          assert b["status_counts"]=={"fixed_arrays_observed":2},b
+          shapes=[x["pack_shapes"] for x in b["details"]]
+          assert all(x["status"]=="shape_array_observed" for x in shapes),shapes
+          assert sorted(x["packs"] for x in shapes)==[1,2],shapes
+          assert any(x["kinds"]=={"metadata":1,"witness_table":1} for x in shapes),shapes
           PY
       - uses: actions/upload-artifact@v4
         if: always()
