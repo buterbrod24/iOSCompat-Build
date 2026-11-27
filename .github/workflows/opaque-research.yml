@@ -1,0 +1,38 @@
+name: Opaque type identities and compiler descriptor pairs
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'opaque-research/**'
+      - 'scripts/swift_symbol_roles.py'
+      - '.github/workflows/opaque-research.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -swift-version 5 -parse-as-library -Onone opaque-research/Fixture.swift opaque-research/Measure.swift -o "$RUNNER_TEMP/measure"
+          "$RUNNER_TEMP/measure" | tee output/host.txt
+          grep -Fx 'TOTAL 10/10' output/host.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          for version in 16.2 17.0; do
+            xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$version" -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name OpaqueFixture -Onone -emit-library opaque-research/Fixture.swift -o "$RUNNER_TEMP/opaque-$version.dylib"
+            xcrun nm -gjU "$RUNNER_TEMP/opaque-$version.dylib" > "output/names-$version.txt"
+            python3 opaque-research/verify.py "output/names-$version.txt" --demangler "$(xcrun --find swift-demangle)" | tee "output/pairs-$version.json"
+            xcrun nm -ju "$RUNNER_TEMP/opaque-$version.dylib" > "output/imports-$version.txt"
+            xcrun vtool -show-build "$RUNNER_TEMP/opaque-$version.dylib" > "output/build-$version.txt"
+          done
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -Onone opaque-research/Fixture.swift opaque-research/Measure.swift -o "$RUNNER_TEMP/measure-ios"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opaque-type-evidence
+          path: output/
+          if-no-files-found: warn
