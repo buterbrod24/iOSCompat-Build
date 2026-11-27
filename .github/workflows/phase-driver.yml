@@ -1,0 +1,37 @@
+name: Integrated independent phase motion controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'phase-driver/**'
+      - 'phase-research/Sequence.swift'
+      - 'completion-research/Group.swift'
+      - 'keyframe-research/Motion.swift'
+      - 'keyframe-research/Spring.swift'
+      - '.github/workflows/phase-driver.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          files=(phase-driver/Driver.swift phase-driver/Measure.swift phase-research/Sequence.swift completion-research/Group.swift keyframe-research/Motion.swift keyframe-research/Spring.swift)
+          xcrun swiftc -swift-version 5 -parse-as-library -O "${files[@]}" -o "$RUNNER_TEMP/driver"
+          "$RUNNER_TEMP/driver" | tee output/controls.txt
+          grep -Fx 'TOTAL 13/13' output/controls.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O "${files[@]}" -o "$RUNNER_TEMP/driver-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/driver-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase-driver-evidence
+          path: output/*.txt
+          if-no-files-found: warn
