@@ -1,0 +1,42 @@
+name: SwiftUI shape style resolution ABI research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'style-research/**'
+      - '.github/workflows/style-research.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -target "$(uname -m)-apple-macos13.0" -swift-version 5 -parse-as-library -O style-research/Adapter.swift style-research/Measure.swift -o "$RUNNER_TEMP/measure"
+          "$RUNNER_TEMP/measure" | tee output/controls.txt
+          grep -Fx 'TOTAL 5/5' output/controls.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O style-research/Adapter.swift style-research/Measure.swift -o "$RUNNER_TEMP/measure-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/measure-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -emit-object style-research/Adapter.swift -o "$RUNNER_TEMP/adapter.o"
+          xcrun nm -ju "$RUNNER_TEMP/adapter.o" > output/legacy-imports.txt
+          if grep -E '10ShapeStyleP7resolve|10ShapeStyleP8Resolved|5ColorV8Resolved' output/legacy-imports.txt; then exit 1; fi
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -Onone -emit-object style-research/Stock.swift -o "$RUNNER_TEMP/stock.o"
+          xcrun nm -ju "$RUNNER_TEMP/stock.o" > output/stock-imports.txt
+          xcrun swift-demangle --compact < output/stock-imports.txt > output/stock-demangled.txt
+          grep -F 'ShapeStyle' output/stock-demangled.txt
+          grep -F 'resolve' output/stock-demangled.txt
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios17.0 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -Onone -emit-ir style-research/Stock.swift -o "$RUNNER_TEMP/stock.ll"
+          grep -E 'swiftcc.*(resolve|stockResolve|stockColor|stockText)' "$RUNNER_TEMP/stock.ll" > output/call-shapes.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: style-research-evidence
+          path: output/*.txt
+          if-no-files-found: warn
