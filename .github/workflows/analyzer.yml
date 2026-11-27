@@ -18,6 +18,8 @@ on:
       - 'scripts/test_backdeploy_markers.py'
       - 'scripts/deployment_metadata.py'
       - 'scripts/test_deployment_metadata.py'
+      - 'scripts/export_trie.py'
+      - 'scripts/test_export_trie.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -36,3 +38,5 @@ jobs:
       - run: python3 scripts/test_backdeploy_markers.py
 
       - run: python3 scripts/test_deployment_metadata.py
+
+      - run: python3 scripts/test_export_trie.py

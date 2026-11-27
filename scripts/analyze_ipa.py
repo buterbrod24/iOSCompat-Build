@@ -4,6 +4,7 @@ import argparse, json, pathlib, sys, zipfile, struct, posixpath
 from import_summary import summarize
 from backdeploy_markers import inspect_markers, annotate_imports
 from deployment_metadata import inspect_deployment
+from export_trie import inspect_exports, summarize_exports
 from macho_imports import read_imports, read_dependencies, declared_provider
 
 def validate_inventory(inventory, target):
@@ -32,7 +33,7 @@ def export_evidence(inventory, provider, symbol):
 def scan(path, catalog, inventory=None):
     if inventory is not None:
         validate_inventory(inventory, catalog["target"])
-    result = {"schema": 8, "target": catalog["target"], "images": [], "limitations": [
+    result = {"schema": 9, "target": catalog["target"], "images": [], "limitations": [
         "Local path candidates only; no inherited runpath stack, executable context or dyld cache export inventory",
         "Fat binaries and classical bind streams are not fully decoded",
         "Candidate evidence is not proof of compatibility with this image",
@@ -75,6 +76,10 @@ def scan(path, catalog, inventory=None):
                     image["deployment"] = inspect_deployment(data,catalog["target"])
                     image["backdeploy"] = inspect_markers(data)
                     annotate_imports(image)
+                    try:
+                        image["exports"] = summarize_exports(inspect_exports(data))
+                    except (ValueError, struct.error) as exc:
+                        image["exports"] = {"status":"uninspected_error","error":str(exc)}
                 except (ValueError, struct.error, OSError) as exc:
                     image["error"] = str(exc)
     if inventory is not None:
