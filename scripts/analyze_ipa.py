@@ -2,6 +2,7 @@
 """Read-only inventory of thin Mach-O imports inside an IPA. Unknown is not compatible."""
 import argparse, json, pathlib, sys, zipfile, struct, posixpath
 from import_summary import summarize
+from backdeploy_markers import inspect_markers, annotate_imports
 from macho_imports import read_imports, read_dependencies, declared_provider
 
 def validate_inventory(inventory, target):
@@ -30,10 +31,11 @@ def export_evidence(inventory, provider, symbol):
 def scan(path, catalog, inventory=None):
     if inventory is not None:
         validate_inventory(inventory, catalog["target"])
-    result = {"schema": 6, "target": catalog["target"], "images": [], "limitations": [
+    result = {"schema": 7, "target": catalog["target"], "images": [], "limitations": [
         "Local path candidates only; no inherited runpath stack, executable context or dyld cache export inventory",
         "Fat binaries and classical bind streams are not fully decoded",
-        "Candidate evidence is not proof of compatibility with this image"]}
+        "Candidate evidence is not proof of compatibility with this image",
+        "Back-deployment markers are syntactic nlist name evidence only; stripped and inlined code may be invisible"]}
     with zipfile.ZipFile(path) as archive:
         budget = 1024 * 1024 * 1024
         for info in archive.infolist():
@@ -69,6 +71,8 @@ def scan(path, catalog, inventory=None):
                             library_weak=library_weak, effective_weak=bool(weak or library_weak),
                             native_export=export_evidence(inventory, provider, key) if cpu == 0x100000c and subtype & 0xffffff == 0 else "unknown",
                             status=entry["status"] if matched else "unknown", expected_provider=entry.get("provider")))
+                    image["backdeploy"] = inspect_markers(data)
+                    annotate_imports(image)
                 except (ValueError, struct.error, OSError) as exc:
                     image["error"] = str(exc)
     if inventory is not None:

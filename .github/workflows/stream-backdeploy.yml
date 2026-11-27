@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'stream-backdeploy/**'
+      - 'scripts/backdeploy_markers.py'
       - '.github/workflows/stream-backdeploy.yml'
 permissions:
   contents: read
@@ -30,6 +31,7 @@ jobs:
             done
           done
           python3 stream-backdeploy/report.py "$RUNNER_TEMP/stream-backdeploy" | tee output/comparison.txt
+          python3 stream-backdeploy/markers.py "$RUNNER_TEMP/stream-backdeploy" | tee output/markers.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
