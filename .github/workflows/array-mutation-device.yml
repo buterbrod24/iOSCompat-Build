@@ -1,0 +1,55 @@
+name: Array mutation physical device IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-mutation-device/**'
+      - 'array-compat/MutationCandidate.swift'
+      - '.github/workflows/array-mutation-device.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/array-mutation/Payload/ArrayMutationProbe.app"
+          dir="$RUNNER_TEMP/mutation-module"
+          mkdir -p "$app/Frameworks" "$dir" output
+          lib="$app/Frameworks/libSwiftCoreMutationCompat.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name SwiftCoreMutationCompat -emit-library -emit-module -emit-module-path "$dir/SwiftCoreMutationCompat.swiftmodule" array-compat/MutationCandidate.swift -Xlinker -install_name -Xlinker @rpath/libSwiftCoreMutationCompat.dylib -o "$lib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -I "$dir" -L "$app/Frameworks" -lSwiftCoreMutationCompat -Xlinker -rpath -Xlinker @executable_path/Frameworks array-mutation-device/Checks.swift array-mutation-device/DeviceProbe.swift -o "$app/ArrayMutationProbe"
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ArrayMutationProbe' -c 'Set :CFBundleIdentifier net.ioscompat.arraymutationprobe' -c 'Set :CFBundleName ArrayMutationProbe' -c 'Set :CFBundleDisplayName Array Mutation Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          for file in "$lib" "$app/ArrayMutationProbe"; do
+            name="$(basename "$file")"
+            xcrun vtool -show-build "$file" | tee "output/$name-build.txt"
+            grep -Eq 'minos[[:space:]]+16\.2$' "output/$name-build.txt"
+            xcrun nm -um "$file" | tee "output/$name-imports.txt"
+            if grep -F 'Ts5' "output/$name-imports.txt"; then exit 1; fi
+          done
+          grep -F 'ioscompatAppendReference' output/ArrayMutationProbe-imports.txt
+          grep -F 'ioscompatPrepareAndAppend' output/ArrayMutationProbe-imports.txt
+          xcrun otool -L "$app/ArrayMutationProbe" | tee output/dependencies.txt
+          grep -F '@rpath/libSwiftCoreMutationCompat.dylib' output/dependencies.txt
+          codesign --force --sign - "$lib"
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/array-mutation && zip -qry "$GITHUB_WORKSPACE/output/iOSCompat-ArrayMutationProbe-0.1.0.ipa" Payload)
+          unzip -t output/iOSCompat-ArrayMutationProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: array-mutation-device-probe
+          path: output/iOSCompat-ArrayMutationProbe-0.1.0.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: array-mutation-device-evidence
+          path: output/*.txt
+          if-no-files-found: warn

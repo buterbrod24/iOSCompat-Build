@@ -1,0 +1,3 @@
+# Array mutation physical device probe 0.1.0
+
+Standalone app for iOS 16.2 ARM64 with the independently linked typed mutation dylib. Six public-API controls cover capacity, order, COW, growth, retention and release. A journal records START before the checks and COMPLETE after the results. A crash during checks may leave only START. The user can share a TXT report. The build is ad hoc signed for subsequent installation through the user's compatible signing/installation method. No private ABI aliases, system replacement or third-party application compatibility claims. Build and device execution not yet verified.
