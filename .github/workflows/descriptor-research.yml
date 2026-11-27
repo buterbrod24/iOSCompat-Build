@@ -1,0 +1,36 @@
+name: Swift nominal descriptor header evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'descriptor-research/**'
+      - 'scripts/swift_descriptor_inventory.py'
+      - '.github/workflows/descriptor-research.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p output
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name DescriptorFixture -Onone -emit-library descriptor-research/Fixture.swift -o "$RUNNER_TEMP/fixture.dylib"
+          python3 scripts/swift_descriptor_inventory.py "$RUNNER_TEMP/fixture.dylib" | tee output/headers.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open("output/headers.json"))
+          assert r["status"]=="inspected",r
+          assert r["nominal_kinds"]=={"class":1,"enum":1,"struct":2},r
+          assert r["generic_headers"]==1,r
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-descriptor-header-evidence
+          path: output/*.json
+          if-no-files-found: warn
