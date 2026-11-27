@@ -1,0 +1,37 @@
+name: Swift reference array source adapters
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-compat/Mutation*.swift'
+      - '.github/workflows/array-mutation.yml'
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          for mode in Onone O; do
+            xcrun swiftc -swift-version 5 -parse-as-library "-$mode" array-compat/MutationCandidate.swift array-compat/MutationMeasure.swift -o "$RUNNER_TEMP/mutation-$mode"
+            "$RUNNER_TEMP/mutation-$mode" | tee "output/$mode.txt"
+            grep -Fx 'TOTAL 6/6' "output/$mode.txt"
+          done
+          diff -u output/Onone.txt output/O.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library array-compat/MutationCandidate.swift array-compat/MutationMeasure.swift -o "$RUNNER_TEMP/mutation-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/mutation-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$RUNNER_TEMP/mutation-ios" | tee output/imports.txt
+          if grep -F 'Ts5' output/imports.txt; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: array-mutation-source-evidence
+          path: output/*.txt
+          if-no-files-found: warn
