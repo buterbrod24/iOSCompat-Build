@@ -28,6 +28,8 @@ on:
       - 'scripts/test_cache_set.py'
       - 'scripts/cache_exports.py'
       - 'scripts/test_cache_exports.py'
+      - 'scripts/cache_compare.py'
+      - 'scripts/test_cache_compare.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -56,3 +58,5 @@ jobs:
       - run: python3 scripts/test_cache_set.py
 
       - run: python3 scripts/test_cache_exports.py
+
+      - run: python3 scripts/test_cache_compare.py
