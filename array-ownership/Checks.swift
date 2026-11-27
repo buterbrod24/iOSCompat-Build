@@ -30,7 +30,7 @@ enum ArrayOwnershipChecks {
         b.ioscompatReserveCapacity(4096)
         rows.append(("Validated reserve after shared mutation", b.capacity >= 4096 && b.count == 257 && b[256] === replacement))
         let bridged = NSArray(array: tokens)
-        var bridge = bridged as! [AnyObject]
+        var bridge = bridged as [AnyObject]
         rows.append(("NSArray bridge preserves identities", bridge.count == 256 && zip(bridge,tokens).allSatisfy { $0.0 === $0.1 }))
         bridge[0] = replacement
         bridge.append(replacement)

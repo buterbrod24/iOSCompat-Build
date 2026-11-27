@@ -1,0 +1,3 @@
+# Swift Core Array Probe 0.1.0
+
+The original app runs the twelve public API ownership controls on physical iOS 16.2, then performs 13 exact specialized-name lookups and 13 syntactic generic-name queries against libswiftCore using RTLD_FIRST. Generic name queries are hypotheses, not replacements; neither kind of private symbol is invoked. Lookup results are evidence, not pass/fail tests. Journal is saved before the batch and after each pair of lookups. The app has an independent bundle ID, no system modification, no third-party binary, no new specialized exports. Host public API checks passed 12/12 at -Onone and -O, and ARM64 iOS 16.2 build succeeded in run 46027404329; device results are pending.

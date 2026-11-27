@@ -1,0 +1,46 @@
+name: Swift Core array physical device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'array-device/**'
+      - 'array-ownership/Checks.swift'
+      - 'array-compat/Candidate.swift'
+      - '.github/workflows/array-device.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build original iOS 16.2 diagnostic app
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/array-device/Payload/ArrayDeviceProbe.app"
+          mkdir -p "$app" output
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ArrayDeviceProbe' -c 'Set :CFBundleIdentifier net.ioscompat.arraydeviceprobe' -c 'Set :CFBundleName ArrayDeviceProbe' -c 'Set :CFBundleDisplayName Swift Core Array Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O array-compat/Candidate.swift array-ownership/Checks.swift array-device/DeviceProbe.swift -o "$app/ArrayDeviceProbe"
+          xcrun vtool -show-build "$app/ArrayDeviceProbe" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$app/ArrayDeviceProbe" > output/imports.txt
+          if grep -F 'Ts5' output/imports.txt; then exit 1; fi
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/array-device && zip -qry "$GITHUB_WORKSPACE/output/iOSCompat-ArrayProbe-0.1.0.ipa" Payload)
+          unzip -t output/iOSCompat-ArrayProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swiftcore-array-device-probe
+          path: output/iOSCompat-ArrayProbe-0.1.0.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swiftcore-array-device-evidence
+          path: output/*.txt
+          if-no-files-found: warn
