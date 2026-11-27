@@ -44,7 +44,7 @@ jobs:
           dir="$RUNNER_TEMP/ios-stock"
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name Observation -emit-library -Onone "$RUNNER_TEMP/ios-source/"*.swift observation-research/PlatformSupport.swift -Xlinker -install_name -Xlinker @rpath/libObservationResearch.dylib -o "$dir/libObservationResearch.dylib"
           shasum -a 256 -c "$dir/stock.sha"
-          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -emit-library "$dir/stock.o" "$dir/libObservationResearch.dylib" -Xlinker -dead_strip_dylibs -Xlinker -install_name -Xlinker @rpath/libStockObservationIOS.dylib -o "$dir/libStockObservationIOS.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -emit-library "$dir/stock.o" "$dir/libObservationResearch.dylib" -Xlinker -dead_strip_dylibs -Xlinker -rpath -Xlinker @loader_path -Xlinker -install_name -Xlinker @rpath/libStockObservationIOS.dylib -o "$dir/libStockObservationIOS.dylib"
           for file in libObservationResearch.dylib libStockObservationIOS.dylib; do
             xcrun vtool -show-build "$dir/$file" | tee "output/$file-build.txt"
             grep -Eq 'minos[[:space:]]+16\.2$' "output/$file-build.txt"
@@ -57,6 +57,33 @@ jobs:
           xcrun nm -gjU "$dir/libStockObservationIOS.dylib" > "$dir/stock-exports.txt"
           grep -Fx '_ioscompat_stock_observation_checks' "$dir/stock-exports.txt"
           python3 observation-stock-ios/check_link.py "$dir/stock-imports.txt" "$dir/exports.txt" output/stock-bindings.txt | tee output/link-summary.txt
+      - name: Package independent client probe after all static gates
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          dir="$RUNNER_TEMP/ios-stock"
+          app="$PWD/build/observation-stock/Payload/ObservationStockProbe.app"
+          mkdir -p "$app/Frameworks" output-device
+          cp "$dir/libObservationResearch.dylib" "$dir/libStockObservationIOS.dylib" "$app/Frameworks/"
+          curl -fsSL "https://raw.githubusercontent.com/swiftlang/swift/ea95594ae137f288bf29a0b489b8689680a0086a/LICENSE.txt" -o "$app/Observation-LICENSE.txt"
+          cp observation-research/NOTICE.txt "$app/Observation-NOTICE.txt"
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ObservationStockProbe' -c 'Set :CFBundleIdentifier net.ioscompat.observationstockprobe' -c 'Set :CFBundleName ObservationStockProbe' -c 'Set :CFBundleDisplayName Observation Probe 0.2' -c 'Set :CFBundleShortVersionString 0.2.0' -c 'Set :CFBundleVersion 2' "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library observation-stock-ios/DeviceProbe.swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -o "$app/ObservationStockProbe"
+          xcrun vtool -show-build "$app/ObservationStockProbe" | tee output/device-build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/device-build.txt
+          xcrun otool -L "$app/ObservationStockProbe" > output/device-dependencies.txt
+          if grep -F 'libswiftObservation.dylib' output/device-dependencies.txt; then exit 1; fi
+          for lib in "$app/Frameworks/"*.dylib; do codesign --force --sign - "$lib"; done
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/observation-stock && zip -qry "$GITHUB_WORKSPACE/output-device/iOSCompat-ObservationProbe-0.2.0.ipa" Payload)
+          unzip -t output-device/iOSCompat-ObservationProbe-0.2.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: observation-stock-device-probe
+          path: output-device/iOSCompat-ObservationProbe-0.2.0.ipa
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
