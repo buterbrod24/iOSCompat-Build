@@ -1,0 +1,21 @@
+name: Swift ABI demangler role research
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/swift_symbol_roles.py'
+      - 'scripts/test_swift_symbol_roles.py'
+      - '.github/workflows/swift-symbol-roles.yml'
+permissions:
+  contents: read
+jobs:
+  classify:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          swift-demangle --version
+          python3 scripts/test_swift_symbol_roles.py
