@@ -1,0 +1,32 @@
+name: Explicit animation completion controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'completion-research/**'
+      - '.github/workflows/completion-research.yml'
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -swift-version 5 -parse-as-library -O completion-research/Group.swift completion-research/Measure.swift -o "$RUNNER_TEMP/measure"
+          "$RUNNER_TEMP/measure" | tee output/controls.txt
+          grep -Fx 'TOTAL 12/12' output/controls.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O completion-research/Group.swift completion-research/Measure.swift -o "$RUNNER_TEMP/measure-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/measure-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: animation-completion-evidence
+          path: output/*.txt
+          if-no-files-found: warn
