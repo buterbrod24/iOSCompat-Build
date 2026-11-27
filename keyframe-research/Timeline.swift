@@ -49,8 +49,11 @@ public struct CompatScalarTimeline {
             case .cubic(let next,let d,let a,let b):
                 if t<d {
                     let u=t/d, u2=u*u, u3=u2*u
-                    let v=(2*u3-3*u2+1)*previous+(u3-2*u2+u)*d*a
-                         +(-2*u3+3*u2)*next+(u3-u2)*d*b
+                    let p0=(2*u3-3*u2+1)*previous
+                    let p1=(u3-2*u2+u)*d*a
+                    let p2=(-2*u3+3*u2)*next
+                    let p3=(u3-u2)*d*b
+                    let v=p0+p1+p2+p3
                     return v.isFinite ? v : nil
                 }
                 t-=d;previous=next
