@@ -1,0 +1,53 @@
+name: Legacy conformance physical device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'witness-legacy-device/**'
+      - 'metadata-compat/WitnessFixture.swift'
+      - '.github/workflows/witness-legacy-device.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/legacy-witness/Payload/LegacyWitnessProbe.app"
+          dir="$RUNNER_TEMP/witness-module"
+          mkdir -p "$app/Frameworks" "$dir" output
+          lib="$app/Frameworks/libWitnessFixture.dylib"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -enable-library-evolution -module-name WitnessFixture -emit-library -emit-module -emit-module-path "$dir/WitnessFixture.swiftmodule" metadata-compat/WitnessFixture.swift -Xlinker -install_name -Xlinker @rpath/libWitnessFixture.dylib -o "$lib"
+          xcrun nm -gjU "$lib" | tee output/exports.txt
+          grep -Fx '_$s14WitnessFixture14CompatReadableMp' output/exports.txt
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -I "$dir" -L "$app/Frameworks" -lWitnessFixture -Xlinker -rpath -Xlinker @executable_path/Frameworks witness-legacy-device/DeviceProbe.swift -o "$app/LegacyWitnessProbe"
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable LegacyWitnessProbe' -c 'Set :CFBundleIdentifier net.ioscompat.legacywitnessprobe' -c 'Set :CFBundleName LegacyWitnessProbe' -c 'Set :CFBundleDisplayName Legacy Witness Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          for file in "$lib" "$app/LegacyWitnessProbe"; do
+            name="$(basename "$file")"
+            xcrun vtool -show-build "$file" | tee "output/$name-build.txt"
+            grep -Eq 'minos[[:space:]]+16\.2$' "output/$name-build.txt"
+            xcrun nm -um "$file" > "output/$name-imports.txt"
+            if grep -E 'swift_(conformsToProtocol2|getOpaqueTypeMetadata2|getOpaqueTypeConformance2|getTypeByMangledNameInContext2|getTypeByMangledNameInContextInMetadataState2)([[:space:]]|$)' "output/$name-imports.txt"; then exit 1; fi
+          done
+          codesign --force --sign - "$lib"
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/legacy-witness && zip -qry "$GITHUB_WORKSPACE/output/iOSCompat-LegacyWitnessProbe-0.1.0.ipa" Payload)
+          unzip -t output/iOSCompat-LegacyWitnessProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: legacy-witness-device
+          path: output/iOSCompat-LegacyWitnessProbe-0.1.0.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy-witness-device-evidence
+          path: output/*.txt
+          if-no-files-found: warn

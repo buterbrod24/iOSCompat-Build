@@ -1,0 +1,3 @@
+# Legacy witness device probe 0.1.0
+
+An isolated ARM64 iOS 16.2 experiment calls the legacy runtime lookup only with compiler-owned fixture metatypes and our own exported protocol descriptor. Atomic journal entries precede each private call; an interrupted run can be shared after relaunch. Six checks compare positive, negative, repeat identity and public behavior. No pointer dereference, system library replacement, signed descriptor conversion, or modern ABI alias. Private runtime calls may crash the test app. Ad hoc IPA requires a compatible installation method. CI and physical device evidence pending.
