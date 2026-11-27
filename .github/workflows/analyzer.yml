@@ -30,6 +30,10 @@ on:
       - 'scripts/test_cache_exports.py'
       - 'scripts/cache_compare.py'
       - 'scripts/test_cache_compare.py'
+      - 'scripts/audit_impact.py'
+      - 'scripts/test_audit_impact.py'
+      - 'scripts/swift_typeref_inventory.py'
+      - 'scripts/test_swift_typeref_inventory.py'
       - 'scripts/audit_coverage.py'
       - 'scripts/test_audit_coverage.py'
       - 'scripts/legacy_bind.py'
@@ -68,3 +72,6 @@ jobs:
       - run: python3 scripts/test_legacy_bind.py
 
       - run: python3 scripts/test_audit_coverage.py
+
+      - run: python3 scripts/test_audit_impact.py
+      - run: python3 scripts/test_swift_typeref_inventory.py

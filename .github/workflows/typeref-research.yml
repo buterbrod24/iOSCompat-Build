@@ -1,0 +1,34 @@
+name: Compiler Swift symbolic-name framing evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'typeref-research/**'
+      - 'scripts/swift_typeref_inventory.py'
+      - '.github/workflows/typeref-research.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p output
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name TyperefFixture -Onone -emit-library typeref-research/Fixture.swift -o "$RUNNER_TEMP/fixture.dylib"
+          python3 scripts/swift_typeref_inventory.py "$RUNNER_TEMP/fixture.dylib" | tee output/typeref.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open("output/typeref.json"))
+          assert r["status"]=="framed" and r["records_with_references"]>0,r
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typeref-structure-evidence
+          path: output/*.json
+          if-no-files-found: warn
