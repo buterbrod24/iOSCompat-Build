@@ -1,0 +1,45 @@
+name: Swift context reference compiler fixture
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'metadata-compat/Context*.swift'
+      - 'scripts/swift_typeref_inventory.py'
+      - '.github/workflows/context-fixture.yml'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -swift-version 5 -parse-as-library -O metadata-compat/ContextFixture.swift metadata-compat/ContextMeasure.swift -o "$RUNNER_TEMP/context-measure"
+          "$RUNNER_TEMP/context-measure" | tee output/host.txt
+          grep -Fx 'TOTAL 6/6' output/host.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          for version in 16.2 17.0; do
+            lib="$RUNNER_TEMP/context-$version.dylib"
+            xcrun --sdk iphoneos swiftc -target "arm64-apple-ios$version" -sdk "$sdk" -swift-version 5 -parse-as-library -Onone -enable-library-evolution -module-name ContextFixture -emit-library metadata-compat/ContextFixture.swift -o "$lib"
+            python3 scripts/swift_typeref_inventory.py "$lib" > "output/typeref-$version.json"
+            xcrun nm -um "$lib" > "output/imports-$version.txt"
+            xcrun vtool -show-build "$lib" > "output/build-$version.txt"
+          done
+          python3 - <<'PY'
+          import json
+          for version in ("16.2", "17.0"):
+              with open(f"output/typeref-{version}.json") as f:
+                  report = json.load(f)
+              assert report["status"] == "framed", report
+              assert report["records_with_references"] > 0, report
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: context-fixture-evidence
+          path: output/
+          if-no-files-found: warn
