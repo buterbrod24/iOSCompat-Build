@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/analyze_ipa.py'
+      - 'scripts/local_symbol_query.py'
+      - 'scripts/test_local_symbol_query.py'
       - 'scripts/dependency_context.py'
       - 'scripts/test_dependency_context.py'
       - 'scripts/metadata_inventory.py'
@@ -104,3 +106,5 @@ jobs:
       - run: python3 scripts/test_value_witness_flags.py
 
       - run: python3 scripts/test_dependency_context.py
+
+      - run: python3 scripts/test_local_symbol_query.py

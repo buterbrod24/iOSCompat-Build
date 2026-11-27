@@ -6,6 +6,9 @@ on:
     paths:
       - 'reexport-fixtures/**'
       - 'scripts/export_trie.py'
+      - 'scripts/local_symbol_query.py'
+      - 'scripts/dependency_context.py'
+      - 'scripts/analyze_ipa.py'
       - 'scripts/reexport_graph.py'
       - 'scripts/macho_imports.py'
       - '.github/workflows/reexport-fixtures.yml'
@@ -30,9 +33,21 @@ jobs:
           xcrun dyld_info -exports "$dir/libFacade.dylib" | tee output/facade-exports.txt
           python3 reexport-fixtures/verify.py "$dir" | tee output/results.txt
           grep -Fx 'TOTAL 5/5' output/results.txt
+          app="$dir/Payload/Test.app"
+          mkdir -p "$app/Frameworks"
+          cp "$dir/"*.dylib "$app/Frameworks/"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios16.2 -isysroot "$sdk" reexport-fixtures/Consumer.c "$dir/libFacade.dylib" -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,"$dir" -o "$app/Test"
+          (cd "$dir" && zip -qr "$RUNNER_TEMP/local-fixture.ipa" Payload)
+          python3 scripts/local_symbol_query.py "$RUNNER_TEMP/local-fixture.ipa" --root Payload/Test.app/Test --symbol _ioscompat_leaf_value --output output/local-query.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open("output/local-query.json"))
+          assert any(p["chain"][-1]["image"].endswith("/libLeaf.dylib") for row in r["rows"] for p in row["candidate_paths"]),r
+          print("PASS local import to leaf export evidence")
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: real-reexport-evidence
-          path: output/*.txt
+          path: output/
           if-no-files-found: warn
