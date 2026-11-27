@@ -1,0 +1,37 @@
+name: Swift protocol and conformance header evidence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'protocol-header-research/**'
+      - 'scripts/swift_protocol_inventory.py'
+      - '.github/workflows/protocol-header-research.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p output
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name ProtocolHeaderFixture -Onone -emit-library protocol-header-research/Fixture.swift -o "$RUNNER_TEMP/fixture.dylib"
+          python3 scripts/swift_protocol_inventory.py "$RUNNER_TEMP/fixture.dylib" | tee output/headers.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open("output/headers.json"))
+          assert r["status"]=="inspected",r
+          assert r["protocols"]["record_status"].get("fixed_header_observed")==1,r
+          assert r["conformances"]["record_status"].get("fixed_header_observed")==2,r
+          assert r["conformances"]["requirement_counts"]["conditional_requirements"]>=1,r
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: swift-protocol-header-evidence
+          path: output/*.json
+          if-no-files-found: warn
