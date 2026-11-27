@@ -45,7 +45,7 @@ import Foundation
         refresh()
         return true
     }
-    private func refresh() {
+    @discardableResult private func refresh() -> Bool {
         let total = suite.cases().count
         let text = "iOSCompat Unified Probe 0.7.0\nOS: \(UIDevice.current.systemVersion)\nCompleted \(progress.next)/\(total); PASS \(progress.passed); FAIL \(progress.failed); EVIDENCE \(progress.evidence); INTERRUPTED \(progress.interrupted)\n\n" + progress.lines.joined(separator:"\n\n")
         log.text = text
@@ -53,19 +53,34 @@ import Foundation
             try FileManager.default.createDirectory(at:reportURL.deletingLastPathComponent(),withIntermediateDirectories:true)
             try JSONEncoder().encode(progress).write(to:stateURL,options:.atomic)
             try text.write(to:reportURL,atomically:true,encoding:.utf8)
-        } catch { log.text += "\nSAVE FAILED: \(error)" }
+            return true
+        } catch {
+            log.text += "\nSAVE FAILED: \(error)"
+            return false
+        }
     }
     @objc private func start() {
         guard !running else { return }
         let tests = suite.cases()
+        guard progress.active == nil, refresh() else { return }
         if progress.next >= tests.count { progress = Progress(); suite.resetBatchAttempt() }
         running = true; run.isEnabled = false
         Task { @MainActor in
             while progress.next < tests.count {
                 let i = progress.next, test = tests[i]
+                let before = progress
                 progress.active = i
                 progress.lines.append("START \(i+1): \(test.name)")
-                refresh() // persistent journal before potentially fatal native call
+                guard refresh() else {
+                    progress = before
+                    // A partial write may have saved the START state. Attempt to restore
+                    // the last completed state, but never execute the unjournaled test.
+                    _ = refresh()
+                    log.text += "\nSTOP: journal could not be saved before test."
+                    running = false; run.isEnabled = true
+                    run.setTitle("Retry saving / resume",for:.normal)
+                    return
+                }
                 await Task.yield()
                 do {
                     let result = try await test.run()
@@ -77,7 +92,12 @@ import Foundation
                     progress.lines.append("FAIL \(test.name)\n\(error)")
                 }
                 progress.active = nil; progress.next = i+1
-                refresh()
+                guard refresh() else {
+                    log.text += "\nSTOP: result could not be saved. No further tests executed."
+                    running = false; run.isEnabled = true
+                    run.setTitle("Retry saving / resume",for:.normal)
+                    return
+                }
                 await Task.yield()
             }
             running = false; run.isEnabled = true
@@ -86,7 +106,7 @@ import Foundation
     }
     @objc private func send() {
         guard let host = window?.rootViewController else { return }
-        refresh()
+        guard refresh() else { return }
         let vc = UIActivityViewController(activityItems:[reportURL],applicationActivities:nil)
         vc.popoverPresentationController?.sourceView = share
         vc.popoverPresentationController?.sourceRect = share.bounds
