@@ -7,3 +7,5 @@ The module is named Observation for compiler-generated symbol comparison, but us
 Related source-level backport: https://github.com/pointfreeco/swift-perception (not incorporated).
 
 Recorded simulator result: 8/8 PASS; full device probe packaging and archive check succeeded in run 45904429563, commit e168802cefe5b0f47047288fa02c444a461b6978. Artifact 15158036218. Physical iOS 16.2 report is still required. Separate callable IR audit compares five lowered function signatures against the original SDK; no client or system binary is patched, and no raw SDK IR is distributed.
+
+Physical device validation (iOS 16.2, build 20C65, Observation Probe 0.1.0): isolated dylib loaded successfully; all eight internal functional controls passed. Raw user report is not stored here. Independent SDK callable IR shape audit also passed 5/5 in run 45905041857 (commit 3e91d1080ae7bd23d547b7597ba881f732e06cba). These results support continued investigation; independent SDK client execution, nominal descriptor and metadata semantics, and third-party application compatibility remain unverified.
