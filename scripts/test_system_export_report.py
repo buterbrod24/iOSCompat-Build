@@ -7,8 +7,16 @@ def report(first="ABSENT",tree="PRESENT",handles="OPEN\tOPEN"):
 class Tests(unittest.TestCase):
     def test_scoped(self):
         r=convert(report(),EXPECTED)
-        self.assertEqual(r["providers"][P]["symbols"],{"swift_test":"absent"})
+        self.assertEqual(r["providers"][P]["symbols"],{})
         self.assertEqual(r["providers"][P]["lookup_pairs"]["swift_test"]["tree"],"present")
+    def test_all_lookup_pairs(self):
+        for first in ("PRESENT","ABSENT","UNKNOWN"):
+            for tree in ("PRESENT","ABSENT","UNKNOWN"):
+                with self.subTest(first=first,tree=tree):
+                    r=convert(report(first,tree),EXPECTED)
+                    want={"swift_test":first.lower()} if first==tree and first!="UNKNOWN" else {}
+                    self.assertEqual(r["providers"][P]["symbols"],want)
+                    self.assertEqual(r["providers"][P]["lookup_pairs"]["swift_test"],{"first":first.lower(),"tree":tree.lower()})
     def test_unavailable(self):
         r=convert(report("UNKNOWN","UNKNOWN","UNAVAILABLE\tUNAVAILABLE"),EXPECTED)
         self.assertEqual(r["providers"][P]["symbols"],{})

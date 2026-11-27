@@ -1,5 +1,5 @@
 """Convert complete scoped probe reports; preserve unknown and scope differences."""
-import argparse,json,re
+import argparse,json
 from pathlib import Path
 from collections import Counter
 
@@ -33,13 +33,14 @@ def convert(text,expected):
                     raise ValueError("invalid lookup state")
             evidence[name]={"first":first.lower(),"tree":tree.lower()}
             counts[first+"/"+tree]+=1
-            # A present/absent pair is internally inconsistent; do not promote it.
-            if first!="UNKNOWN" and not (first=="PRESENT" and tree=="ABSENT"):
+            # Only concordant results enter the analyzer-facing sparse inventory.
+            # Mixed scopes may reveal dependency/reexport evidence, not absence.
+            if first == tree and first in ("PRESENT", "ABSENT"):
                 observations[name]=first.lower()
         providers[provider]={"symbols":observations,"lookup_pairs":evidence,"handles":handles[1:]}
     if pos!=len(lines)-2:raise ValueError("unexpected trailing data")
     return {"schema":1,"target":"16.2","build":"20C65","architecture":"arm64",
-            "method":"System Export Probe 0.1.0 RTLD_FIRST named handle; reexports possible; not direct export trie proof",
+            "method":"System Export Probe 0.1.0 concordant RTLD_FIRST and ordinary named-handle lookups; reexports possible; not direct export trie proof",
             "providers":providers,"lookup_pair_counts":dict(counts)}
 
 def main():
