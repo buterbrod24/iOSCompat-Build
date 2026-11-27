@@ -47,9 +47,8 @@ jobs:
           sdk="$(xcrun --sdk macosx --show-sdk-path)"
           dir="$RUNNER_TEMP/stock-run"
           xcrun --sdk macosx swiftc -target "$(uname -m)-apple-macos13.0" -sdk "$sdk" -swift-version 5 -parse-as-library -enable-library-evolution -module-name Observation -emit-library -Onone "$RUNNER_TEMP/stock-source/"*.swift observation-research/PlatformSupport.swift -Xlinker -install_name -Xlinker @rpath/libObservationResearch.dylib -o "$dir/libObservationResearch.dylib"
-          ln -s libObservationResearch.dylib "$dir/libswiftObservation.dylib"
           shasum -a 256 -c "$RUNNER_TEMP/stock-object.sha"
-          xcrun --sdk macosx swiftc -target "$(uname -m)-apple-macos14.0" -sdk "$sdk" "$dir/stock.o" -L "$dir" -lswiftObservation -Xlinker -rpath -Xlinker @executable_path -o "$dir/candidate"
+          xcrun --sdk macosx swiftc -target "$(uname -m)-apple-macos14.0" -sdk "$sdk" "$dir/stock.o" "$dir/libObservationResearch.dylib" -Xlinker -dead_strip_dylibs -Xlinker -rpath -Xlinker @executable_path -o "$dir/candidate"
           xcrun otool -L "$dir/candidate" | tee output/candidate-dependencies.txt
           grep -F '@rpath/libObservationResearch.dylib' output/candidate-dependencies.txt
           if grep -F '/usr/lib/swift/libswiftObservation.dylib' output/candidate-dependencies.txt; then exit 1; fi
