@@ -1,0 +1,3 @@
+# Textual mangled-name lookup experiment
+
+Uses underscored Swift standard-library APIs _mangledTypeName and _typeByName (not stable public API) to round-trip compiler-generated textual names of explicitly known fixture types. Input is restricted to ASCII letters, digits and underscore, at most 4096 bytes; this is a bounded fixture filter, not a general mangling validator. Twelve checks cover eight type identities, three input guards and distinct generic identities. No symbolic references, context descriptors, generic argument vectors, metadata states or binary aliases. Does not replace either newer runtime entrypoint. Host execution and iOS 16.2 link gates are configured; CI and physical device results pending.

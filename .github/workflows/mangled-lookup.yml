@@ -1,0 +1,37 @@
+name: Swift textual mangled name lookup controls
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'metadata-compat/Mangled*.swift'
+      - '.github/workflows/mangled-lookup.yml'
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          for opt in Onone O; do
+            xcrun swiftc -swift-version 5 -parse-as-library "-$opt" -module-name MangledFixture metadata-compat/MangledLookup.swift metadata-compat/MangledMeasure.swift -o "$RUNNER_TEMP/lookup-$opt"
+            "$RUNNER_TEMP/lookup-$opt" | tee "output/$opt.txt"
+            grep -Fx 'TOTAL 12/12' "output/$opt.txt"
+          done
+          diff -u output/Onone.txt output/O.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -O -parse-as-library -module-name MangledFixture metadata-compat/MangledLookup.swift metadata-compat/MangledMeasure.swift -o "$RUNNER_TEMP/lookup-ios"
+          xcrun vtool -show-build "$RUNNER_TEMP/lookup-ios" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$RUNNER_TEMP/lookup-ios" | tee output/imports.txt
+          if grep -E 'swift_(conformsToProtocol2|getOpaqueTypeMetadata2|getOpaqueTypeConformance2|getTypeByMangledNameInContext2|getTypeByMangledNameInContextInMetadataState2)([[:space:]]|$)' output/imports.txt; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mangled-lookup-evidence
+          path: output/*.txt
+          if-no-files-found: warn
