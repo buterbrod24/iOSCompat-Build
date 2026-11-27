@@ -2,6 +2,7 @@
 """Read-only inventory of thin Mach-O imports inside an IPA. Unknown is not compatible."""
 import argparse, json, pathlib, sys, zipfile, struct, posixpath
 from import_summary import summarize
+import metadata_inventory
 from backdeploy_markers import inspect_markers, annotate_imports
 from deployment_metadata import inspect_deployment
 from export_trie import inspect_exports, summarize_exports
@@ -31,7 +32,7 @@ def export_evidence(inventory, provider, symbol):
         return "unknown"
     return inventory["providers"].get(provider, {}).get("symbols", {}).get(symbol, "unknown")
 
-def scan(path, catalog, inventory=None):
+def scan(path, catalog, inventory=None, *, metadata=False):
     if inventory is not None:
         validate_inventory(inventory, catalog["target"])
     result = {"schema": 10, "target": catalog["target"], "images": [], "limitations": [
@@ -78,6 +79,8 @@ def scan(path, catalog, inventory=None):
                             library_weak=library_weak, effective_weak=bool(weak or library_weak),
                             native_export=export_evidence(inventory, provider, key) if cpu == 0x100000c and subtype & 0xffffff == 0 else "unknown",
                             status=entry["status"] if matched else "unknown", expected_provider=entry.get("provider")))
+                    if metadata and cpu == 0x100000c and subtype & 0xffffff == 0:
+                        image["swift_metadata"] = metadata_inventory.inspect_image(data)
                     image["deployment"] = inspect_deployment(data,catalog["target"])
                     image["backdeploy"] = inspect_markers(data)
                     annotate_imports(image)
@@ -95,6 +98,8 @@ def scan(path, catalog, inventory=None):
         result["deployment_counts"][status] = result["deployment_counts"].get(status,0)+1
     map_dependencies(result["images"])
     result["research_queue"] = summarize(result["images"])
+    if metadata:
+        result["swift_metadata_summary"] = metadata_inventory.summarize(result["images"])
     return result
 
 def map_dependencies(images):
@@ -132,12 +137,13 @@ def main():
     parser.add_argument("ipa", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--inventory", type=pathlib.Path, help="Local sparse system export observations JSON")
+    parser.add_argument("--metadata", action="store_true", help="Opt-in bounded static Swift metadata inventory")
     args = parser.parse_args()
     if args.ipa.resolve() == args.output.resolve():
         parser.error("output must not overwrite input")
     catalog = json.loads((pathlib.Path(__file__).parent / "compat_catalog.json").read_text())
     inventory = json.loads(args.inventory.read_text()) if args.inventory else None
-    report = scan(args.ipa, catalog, inventory)
+    report = scan(args.ipa, catalog, inventory, metadata=args.metadata)
     with args.output.open("x", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
     print("Images:", len(report["images"]), "; report saved locally")

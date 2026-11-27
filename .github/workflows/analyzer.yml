@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/analyze_ipa.py'
+      - 'scripts/metadata_inventory.py'
       - 'scripts/compat_catalog.json'
       - 'scripts/macho_imports.py'
       - 'scripts/test_analyze_ipa.py'

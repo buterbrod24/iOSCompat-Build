@@ -30,6 +30,18 @@ jobs:
             python3 scripts/swift_descriptor_inventory.py "$RUNNER_TEMP/value-$version.dylib" > "output/descriptors-$version.json"
           done
           xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O value-witness-research/Fixture.swift value-witness-research/Measure.swift -o "$RUNNER_TEMP/measure-ios"
+          mkdir -p "$RUNNER_TEMP/layout-fixture/Payload/Test.app/Frameworks"
+          cp "$RUNNER_TEMP/measure-ios" "$RUNNER_TEMP/layout-fixture/Payload/Test.app/Test"
+          cp "$RUNNER_TEMP/value-17.0.dylib" "$RUNNER_TEMP/layout-fixture/Payload/Test.app/Frameworks/ValueFixture.dylib"
+          (cd "$RUNNER_TEMP/layout-fixture" && zip -qr "$RUNNER_TEMP/layout-fixture.ipa" Payload)
+          python3 scripts/analyze_ipa.py "$RUNNER_TEMP/layout-fixture.ipa" --metadata --output output/ipa-inventory.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open("output/ipa-inventory.json"))
+          assert len(r["images"])==2,r["images"]
+          assert all(x.get("swift_metadata",{}).get("nominal",{}).get("status")=="inspected" for x in r["images"])
+          print(json.dumps(r["swift_metadata_summary"],indent=2))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:

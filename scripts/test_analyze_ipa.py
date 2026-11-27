@@ -102,5 +102,31 @@ class AnalyzerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_inventory(inventory,"16.2")
 
+    def test_metadata_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p=pathlib.Path(tmp)/"fixture.ipa"
+            data=struct.pack("<8I",0xfeedfacf,0x100000c,0,2,0,0,0,0)
+            with zipfile.ZipFile(p,"w") as z:
+                z.writestr("Payload/Test.app/Test",data)
+                z.writestr("Payload/Test.app/Fat",b"\xca\xfe\xba\xbe")
+            before=p.read_bytes()
+            catalog={"target":"16.2","symbols":{}}
+            self.assertNotIn("swift_metadata_summary",scan(p,catalog))
+            r=scan(p,catalog,metadata=True)
+            self.assertEqual(r["images"][0]["swift_metadata"]["nominal"]["status"],"section_not_observed")
+            self.assertEqual(r["swift_metadata_summary"]["inspection_counts"]["uninspected_image"],1)
+            self.assertEqual(r["swift_metadata_summary"]["layout_string_flag_headers"],0)
+            self.assertEqual(before,p.read_bytes())
+
+    def test_metadata_exact_provider(self):
+        from metadata_inventory import summarize,CORE
+        name="_swift_generic_instantiateLayoutString"
+        a={"cpu_type":0x100000c,"cpu_subtype":0,"swift_metadata":{"nominal":{"layout_string_flag_headers":1}},
+           "imports":[{"symbol":name,"declared_provider":CORE},{"symbol":name,"declared_provider":CORE}]}
+        b={**a,"imports":[{"symbol":name,"declared_provider":"/wrong"}]}
+        c={**a,"cpu_subtype":2}
+        r=summarize([a,b,c])
+        self.assertEqual(r["layout_runtime_import_image_counts"],{name:1})
+
 if __name__ == "__main__":
     unittest.main()
