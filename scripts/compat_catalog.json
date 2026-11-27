@@ -37,6 +37,51 @@
     "$sScS10makeStream2of15bufferingPolicyScSyxG6stream_ScS12ContinuationVyx_G12continuationtxm_AG09BufferingE0Oyx__GtFZ": {
       "status": "candidate_device_tested",
       "provider": "/usr/lib/swift/libswift_Concurrency.dylib"
+    },
+    "$s11Observation0A9RegistrarV12withMutation2of7keyPath_q0_x_s03KeyG0Cyxq_Gq0_yKXEtKAA10ObservableRzr1_lF": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation0A9RegistrarV6access_7keyPathyx_s03KeyE0Cyxq_GtAA10ObservableRzr0_lF": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation0A9RegistrarV6didSet_7keyPathyx_s03KeyF0Cyxq_GtAA10ObservableRzr0_lF": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation0A9RegistrarV7willSet_7keyPathyx_s03KeyF0Cyxq_GtAA10ObservableRzr0_lF": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation0A9RegistrarVACycfC": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation0A9RegistrarVMa": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation0A9RegistrarVMn": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation10ObservableMp": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
+    },
+    "$s11Observation04withA8Tracking_8onChangexxyXE_yyYbcyXKtlF": {
+      "status": "candidate_internal_device_tested_stock_linked",
+      "provider": "/usr/lib/swift/libswiftObservation.dylib",
+      "evidence": "Internal device controls 8/8 on iOS 16.2; separate ARM64 SDK object link audit 9/9; independent device execution pending"
     }
   }
 }

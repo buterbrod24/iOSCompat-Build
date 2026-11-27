@@ -21,6 +21,16 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(r["incomplete_images"],["B"])
         shared=next(x for x in r["items"] if x["images"]==["A","B"])
         self.assertTrue(shared["required"])
+    def test_observation_candidate_not_certified(self):
+        row={"symbol":"_$s11Observation10ObservableMp","declared_provider":"/usr/lib/swift/libswiftObservation.dylib",
+             "native_export":"unknown","status":"candidate_internal_device_tested_stock_linked",
+             "catalog_provider_match":True,"weak":False}
+        image={"path":"A","cpu_type":0x100000c,"cpu_subtype":0,"complete":True,"imports":[row]}
+        self.assertEqual(summarize([image])["counts"],{"verify_independent_device_execution":1})
+        wrong=dict(row,catalog_provider_match=False)
+        self.assertEqual(summarize([dict(image,imports=[wrong])])["counts"],{"unknown":1})
+        native=dict(row,native_export="present")
+        self.assertEqual(summarize([dict(image,imports=[native])])["counts"],{"native_lookup_present":1})
     def test_conflict_and_architecture(self):
         row={"symbol":"_x","declared_provider":"/usr/lib/test","native_export":"present",
              "status":"missing_unresolved","catalog_provider_match":True,"weak":False}

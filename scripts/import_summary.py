@@ -30,6 +30,8 @@ def summarize(images):
             action = "conflicting_evidence"
         elif "present" in native:
             action = "native_lookup_present"
+        elif "candidate_internal_device_tested_stock_linked" in catalog:
+            action = "verify_independent_device_execution"
         elif "candidate_device_tested" in catalog:
             action = "review_tested_candidate"
         elif "absent" in native or "missing_unresolved" in catalog:
@@ -40,7 +42,7 @@ def summarize(images):
         for field in ("images","observations","catalog_statuses"):
             item[field] = sorted(item[field])
         rows.append(item)
-    order = {"conflicting_evidence":0,"investigate_required_absence":1,"review_tested_candidate":2,
+    order = {"conflicting_evidence":0,"investigate_required_absence":1,"review_tested_candidate":2,"verify_independent_device_execution":2,
              "investigate_weak_absence":3,"architecture_unverified":4,"unknown":5,"native_lookup_present":6}
     rows.sort(key=lambda x:(order[x["action"]],x["provider"] or "",x["symbol"],x["target_architecture_match"]))
     return {"unique_import_groups":len(rows),"counts":dict(Counter(x["action"] for x in rows)),
