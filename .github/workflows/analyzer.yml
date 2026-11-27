@@ -22,6 +22,8 @@ on:
       - 'scripts/test_export_trie.py'
       - 'scripts/reexport_graph.py'
       - 'scripts/test_reexport_graph.py'
+      - 'scripts/cache_inventory.py'
+      - 'scripts/test_cache_inventory.py'
       - '.github/workflows/analyzer.yml'
   workflow_dispatch:
 permissions:
@@ -44,3 +46,5 @@ jobs:
       - run: python3 scripts/test_export_trie.py
 
       - run: python3 scripts/test_reexport_graph.py
+
+      - run: python3 scripts/test_cache_inventory.py
