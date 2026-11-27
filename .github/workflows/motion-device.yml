@@ -1,0 +1,49 @@
+name: Motion playback legacy iOS device probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'motion-device/**'
+      - 'keyframe-research/Spring.swift'
+      - 'keyframe-research/Motion.swift'
+      - '.github/workflows/motion-device.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun swiftc -swift-version 5 -parse-as-library -O motion-device/Playback.swift motion-device/Measure.swift -o "$RUNNER_TEMP/clock"
+          "$RUNNER_TEMP/clock" | tee output/clock.txt
+          grep -Fx 'TOTAL 10/10' output/clock.txt
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          app="$PWD/build/motion/Payload/MotionProbe.app"
+          mkdir -p "$app"
+          cp unified/Info.plist "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable MotionProbe' -c 'Set :CFBundleIdentifier net.ioscompat.motionprobe' -c 'Set :CFBundleName MotionProbe' -c 'Set :CFBundleDisplayName Motion Probe' -c 'Set :CFBundleShortVersionString 0.1.0' -c 'Set :CFBundleVersion 1' "$app/Info.plist"
+          xcrun --sdk iphoneos swiftc -target arm64-apple-ios16.2 -sdk "$sdk" -swift-version 5 -parse-as-library -O keyframe-research/Spring.swift keyframe-research/Motion.swift motion-device/Playback.swift motion-device/DeviceProbe.swift -o "$app/MotionProbe"
+          xcrun vtool -show-build "$app/MotionProbe" | tee output/build.txt
+          grep -Eq 'minos[[:space:]]+16\.2$' output/build.txt
+          xcrun nm -um "$app/MotionProbe" > output/imports.txt
+          if grep -E 'KeyframeAnimator|KeyframeTimeline|PhaseAnimator|SpringKeyframe' output/imports.txt; then exit 1; fi
+          codesign --force --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          (cd build/motion && zip -qry "$GITHUB_WORKSPACE/output/iOSCompat-MotionProbe-0.1.0.ipa" Payload)
+          unzip -t output/iOSCompat-MotionProbe-0.1.0.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motion-device-probe
+          path: output/iOSCompat-MotionProbe-0.1.0.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: motion-device-evidence
+          path: output/*.txt
+          if-no-files-found: warn
